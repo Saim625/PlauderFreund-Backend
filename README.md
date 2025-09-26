@@ -33,7 +33,11 @@ PORT=3000
 1. Clone the repo:
 
    ```bash
+<<<<<<< HEAD
     git remote add origin git@github.com:Saim625/PlauderFreund-Backend.git
+=======
+     git remote add origin git@github.com:Saim625/PlauderFreund-Backend.git
+>>>>>>> 5282458 (setup Express server with /health route)
    ```
 
 Install dependencies: npm install
