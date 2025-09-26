@@ -33,8 +33,7 @@ PORT=3000
 1. Clone the repo:
 
    ```bash
-   git clone https://github.com/your-username/plauderfreund-backend.git
-
+    git remote add origin git@github.com:Saim625/PlauderFreund-Backend.git
    ```
 
 Install dependencies: npm install
