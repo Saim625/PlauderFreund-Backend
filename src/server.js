@@ -3,6 +3,8 @@ import dotenv from "dotenv";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import healthRoute from "./routes/health.js";
+import registerSocketHandler from "./socketHandler.js";
+import logger from "./utils/logger.js";
 
 dotenv.config();
 
@@ -16,16 +18,16 @@ const io = new Server(httpServer, {
 });
 
 io.on("connection", (socket) => {
-  console.log("🟢 Client connected:", socket.id);
+  logger.info("🟢 Client connected:", socket.id);
   registerSocketHandler(socket);
 
   socket.on("disconnect", (socket) => {
-    console.log("🔴 Client disconnected:", socket.id);
+    logger.info("🔴 Client disconnected:", socket.id);
   });
 });
 
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`✅ Server running on http://localhost:${PORT}`);
+  logger.info(`✅ Server running on http://localhost:${PORT}`);
 });
