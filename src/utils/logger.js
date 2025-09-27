@@ -3,7 +3,7 @@ import winston from "winston";
 const logFormat = winston.format.combine(
   winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
   winston.format.printf(
-    (info) => `[${info.timestamp}] ${info.level.toUpperCase()} ${info.message}`
+    (info) => `[${info.timestamp}] ${info.level.toUpperCase()}: ${info.message}`
   )
 );
 
