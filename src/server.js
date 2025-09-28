@@ -4,6 +4,7 @@ import { Server } from "socket.io";
 import healthRoute from "./routes/health.js";
 import sttRoute from "./routes/stt.js";
 import gptRoute from "./routes/gpt.js";
+import ttsRoute from "./routes/tts.js";
 import registerSocketHandler from "./socketHandler.js";
 import logger from "./utils/logger.js";
 import { PORT } from "./config/env.js";
@@ -15,6 +16,7 @@ app.use(express.json());
 app.use("/", healthRoute);
 app.use("/", sttRoute);
 app.use("/", gptRoute);
+app.use("/", ttsRoute);
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
