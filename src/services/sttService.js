@@ -11,6 +11,7 @@ export function createSTTStream(socket, sttStreams) {
       encoding: "LINEAR16", // ✅ 16-bit PCM
       sampleRateHertz: 16000, // ✅ required sample rate
       languageCode: "en-US",
+      alternativeLanguageCodes: ["de-DE", "es-ES", "fr-FR"],
       interimResults: true, // ✅ gives partial transcripts for UI feedback
     },
   };
