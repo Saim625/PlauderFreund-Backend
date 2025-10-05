@@ -1,7 +1,7 @@
 // src/routes/stt.js
 import express from "express";
 import multer from "multer";
-import { transcribeAudio } from "../services/sttService.js";
+// import { transcribeAudio } from "../services/sttService.js";
 
 const upload = multer(); // memory storage by default
 const router = express.Router();

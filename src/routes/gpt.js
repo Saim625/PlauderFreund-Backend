@@ -1,6 +1,6 @@
 // src/routes/gpt.js
 import express from "express";
-import { generateReply } from "../services/gptService.js";
+// import { generateReply } from "../services/gptService.js";
 
 const router = express.Router();
 

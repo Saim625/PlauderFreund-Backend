@@ -19,16 +19,26 @@ app.use("/", gptRoute);
 app.use("/", ttsRoute);
 
 const httpServer = createServer(app);
+
+// Updated Socket.IO config
 const io = new Server(httpServer, {
-  cors: { origin: "*" },
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+    credentials: true,
+  },
+  transports: ["polling", "websocket"], // Add polling fallback
+  allowEIO3: true,
+  pingTimeout: 60000,
+  pingInterval: 25000,
 });
 
 io.on("connection", (socket) => {
-  logger.info("🟢 Client connected:", socket.id);
+  logger.info(`🟢 Client connected: ${socket.id}`);
   registerSocketHandler(socket);
 
   socket.on("disconnect", () => {
-    logger.info("🔴 Client disconnected:", socket.id);
+    logger.info(`🔴 Client disconnected: ${socket.id}`);
   });
 });
 

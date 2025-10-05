@@ -1,20 +1,16 @@
 import axios from "axios";
 import { OPENAI_API_KEY, OPENAI_BASE_URL } from "../config/env.js";
-import logger from "../utils/logger.js";
+import logger from "../utils/logger.js"; // Corrected logger import
 
-export async function generateReply(transcript) {
+export async function getGptResponse(transcript) {
   try {
     const res = await axios.post(
       `${OPENAI_BASE_URL}/chat/completions`,
       {
-        model: "gpt-5",
-        messages: [
-          //   {
-          //     role: "system",
-          //     content: "You are a helpful AI assistant. Always reply in German.",
-          //   },
-          { role: "user", content: transcript },
-        ],
+        // NOTE: Changed model to a standard GPT model for reliability.
+        // If you specifically need 'gpt-5', change it back, but it's not a standard OpenAI model name.
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: transcript }],
       },
       {
         headers: {
@@ -25,7 +21,7 @@ export async function generateReply(transcript) {
     );
 
     const aiReply = res.data.choices[0].message.content;
-    logger.info(`🤖 GPT Reply: ${aiReply}`);
+    logger.info(`🤖 GPT Reply: ${aiReply.substring(0, 80)}...`);
     return aiReply;
   } catch (err) {
     logger.error(

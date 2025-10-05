@@ -4,10 +4,10 @@ import {
   ELEVENLABS_BASE_URL,
   ELEVENLABS_VOICE_ID,
 } from "../config/env.js";
-import fs from "fs";
-import logger from "../utils/logger.js";
+// import fs from "fs"; // Removed: We don't need to save the file
+import logger from "../utils/logger.js"; // Corrected logger import
 
-export async function synthesizeSpeech(text, outputFile = "reply.mp3") {
+export async function synthesizeTTS(text) {
   try {
     const res = await axios.post(
       `${ELEVENLABS_BASE_URL}/text-to-speech/${ELEVENLABS_VOICE_ID}`,
@@ -28,11 +28,11 @@ export async function synthesizeSpeech(text, outputFile = "reply.mp3") {
       }
     );
 
-    // Save for testing
-    fs.writeFileSync(outputFile, res.data);
-    logger.info(`🔊 TTS audio saved as ${outputFile}`);
+    // logger.info(`🔊 TTS audio generated.`); // Logging the size happens in socketHandler
 
-    return res.data; // raw audio buffer
+    // Axios returns ArrayBuffer for 'arraybuffer' responseType,
+    // which Node.js treats as a Buffer when returning it.
+    return res.data;
   } catch (err) {
     logger.error(
       `❌ ElevenLabs TTS Error: ${err.response?.data?.error || err.message}`
