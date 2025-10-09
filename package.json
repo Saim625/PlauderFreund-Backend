@@ -4,11 +4,11 @@
   "main": "src/server.js",
   "type": "module",
   "scripts": {
-  "test": "echo \"Error: no test specified\" && exit 1",
-  "dev": "nodemon src/server.js",
-  "start": "node src/server.js",
-  "build": "echo 'No build step required'"
-},
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "build": "echo 'No build step required'"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -16,12 +16,15 @@
   "dependencies": {
     "@google-cloud/speech": "^7.2.0",
     "axios": "^1.12.2",
+    "base64-stream": "^1.0.0",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "ffmpeg-static": "^5.2.0",
     "multer": "^2.0.2",
+    "node-fetch": "^3.3.2",
     "socket.io": "^4.8.1",
-    "winston": "^3.17.0"
+    "winston": "^3.17.0",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"

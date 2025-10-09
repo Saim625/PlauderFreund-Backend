@@ -9,3 +9,4 @@ export const ELEVENLABS_BASE_URL = process.env.ELEVENLABS_BASE_URL;
 export const PORT = process.env.PORT || 3000;
 export const GOOGLE_APPLICATION_CREDENTIALS =
   process.env.GOOGLE_APPLICATION_CREDENTIALS;
+export const OPENAI_REALTIME_API = process.env.OPENAI_REALTIME_API;
