@@ -10,3 +10,4 @@ export const PORT = process.env.PORT || 3000;
 export const GOOGLE_APPLICATION_CREDENTIALS =
   process.env.GOOGLE_APPLICATION_CREDENTIALS;
 export const OPENAI_REALTIME_API = process.env.OPENAI_REALTIME_API;
+export const ELEVENLABS_MODEL = process.env.ELEVENLABS_MODEL;

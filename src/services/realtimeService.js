@@ -22,22 +22,15 @@ export async function connectToRealtimeAPI() {
         session: {
           type: "realtime",
           model: "gpt-4o-realtime-preview", // adjust if you have a different model name
-          output_modalities: ["audio"],
+          output_modalities: ["text"],
           audio: {
             input: {
               format: { type: "audio/pcm", rate: 24000 },
               turn_detection: { type: "semantic_vad" },
             },
-            output: {
-              format: { type: "audio/pcm" }, // model will stream raw PCM in output deltas
-              voice: "alloy", // choose from available voices
-            },
           },
           instructions:
-            "You are a kind and patient assistant designed to help elderly users. \
-            Speak clearly, slowly, and with empathy. \
-            Avoid using technical or complex language. \
-            If the user sounds confused, gently clarify what they might mean.",
+            "You are a kind and patient assistant designed to help elderly german users.Speak clearly, slowly, and with empathy.Avoid using technical or complex language.If the user sounds confused, gently clarify what they might mean.",
         },
       })
     );

@@ -1,55 +1,147 @@
 // features/realtimeHandler.js
+
 import { connectToRealtimeAPI } from "../services/realtimeService.js";
-import { synthesizeTTS } from "../services/ttsService.js";
 import logger from "../utils/logger.js";
+import {
+  initElevenLabs,
+  startContext,
+  sendTextToElevenLabs,
+  closeContext,
+  closeElevenLabs,
+} from "../services/elevenlabWS.js";
 
 export async function handleRealtimeAI(socket) {
   let gptWs;
+  let currentContextId = null;
+  let isContextClosing = false;
+  let currentResponseId = null; // ✅ NEW: Track current GPT response
 
   try {
     gptWs = await connectToRealtimeAPI();
+    logger.info("✅ [GPT] Connected to Realtime API");
   } catch (err) {
-    logger.error("❌ Failed to connect GPT Realtime:", err);
+    logger.error("❌ [GPT] Failed to connect:", err);
     socket.emit("ai-error", { message: "AI connection failed." });
     return;
   }
 
+  // Initialize ElevenLabs multi-context once
+  initElevenLabs((audioObj) => {
+    logger.info(
+      `🎶 [FLOW] Audio chunk → FE (context: ${audioObj.contextId}, final: ${audioObj.isFinal})`
+    );
+    socket.emit("ai-audio-chunk", audioObj);
+
+    // ✅ When final audio received, close context after delay
+    if (audioObj.isFinal && audioObj.contextId === currentContextId) {
+      logger.info(`🏁 [FLOW] Final audio for ${audioObj.contextId}`);
+      isContextClosing = true;
+
+      setTimeout(() => {
+        if (audioObj.contextId === currentContextId) {
+          closeContext(audioObj.contextId);
+          currentContextId = null;
+          isContextClosing = false;
+        }
+      }, 200);
+    }
+  });
+
   gptWs.on("message", (msg) => {
     const event = JSON.parse(msg.toString());
+    logger.info(`📩 [GPT] Event: ${event.type}`);
 
-    // server-side VAD & lifecycle events for debugging
+    // ✅ NEW: Handle interruption (user starts speaking while AI is responding)
     if (event.type === "input_audio_buffer.speech_started") {
-      logger.info("🟢 GPT: input_audio_buffer.speech_started");
-    }
-    if (event.type === "input_audio_buffer.speech_stopped") {
-      logger.info("🔴 GPT: input_audio_buffer.speech_stopped");
+      logger.info("🎙️ [INTERRUPTION] User started speaking");
+
+      // 1️⃣ Check if there's an active response to interrupt
+      if (currentContextId && !isContextClosing) {
+        logger.warn(
+          `⚠️ [INTERRUPTION] Canceling active response (context: ${currentContextId})`
+        );
+
+        // 2️⃣ Tell frontend to stop audio immediately
+        socket.emit("ai-interrupt");
+
+        // 3️⃣ Cancel current GPT response
+        if (currentResponseId) {
+          logger.info(`🛑 [GPT] Canceling response: ${currentResponseId}`);
+          gptWs.send(
+            JSON.stringify({
+              type: "response.cancel",
+            })
+          );
+        }
+
+        // 4️⃣ Close old ElevenLabs context
+        logger.info(
+          `🧹 [ELEVEN] Closing interrupted context: ${currentContextId}`
+        );
+        closeContext(currentContextId);
+
+        // 5️⃣ Reset state
+        currentContextId = null;
+        currentResponseId = null;
+        isContextClosing = false;
+      }
     }
 
-    // audio chunks (Base64 PCM)
-    if (event.type === "response.output_audio.delta") {
-      const base64Chunk = event.delta; // base64 PCM bytes
-      // forward chunk to FE
-      socket.emit("ai-audio-chunk", base64Chunk);
-      logger.info(`🎧 Forwarded AI audio chunk (${event.delta.length} bytes)`);
+    // When GPT starts responding, create new ElevenLabs context
+    if (event.type === "response.created") {
+      logger.info("🎬 [GPT] Response started");
+      currentResponseId = event.response?.id; // ✅ Track response ID
+
+      // Close old context if exists (safety check)
+      if (currentContextId && !isContextClosing) {
+        logger.info(`🧹 [FLOW] Closing old context: ${currentContextId}`);
+        closeContext(currentContextId);
+      }
+
+      // Start new context
+      currentContextId = startContext();
+      isContextClosing = false;
+      logger.info(`🆕 [FLOW] New context started: ${currentContextId}`);
     }
 
-    // audio finished for this response
-    if (event.type === "response.output_audio.done") {
-      logger.info("✅ GPT finished generating audio response");
-      socket.emit("ai-audio-done", { responseId: event.response?.id });
+    // Send text chunks to ElevenLabs
+    if (event.type === "response.output_text.delta") {
+      const textChunk = event.delta;
+
+      if (currentContextId && !isContextClosing) {
+        sendTextToElevenLabs(textChunk, currentContextId);
+      } else {
+        logger.warn(
+          `⚠️ [FLOW] Received text but context invalid (contextId: ${currentContextId}, closing: ${isContextClosing})`
+        );
+      }
     }
 
-    // overall response finished
+    // GPT finished generating text
+    if (event.type === "response.output_text.done") {
+      logger.info("🏁 [GPT] Text stream done — flushing ElevenLabs buffer");
+
+      if (currentContextId && !isContextClosing) {
+        sendTextToElevenLabs("", currentContextId, { flush: true });
+      }
+    }
+
+    // Overall response complete
     if (event.type === "response.done") {
-      logger.info("✅ GPT response.done received");
-      // optionally include metadata or final text
+      logger.info("✅ [GPT] Response complete");
       socket.emit("ai-response-done", { response: event.response });
+      currentResponseId = null; // ✅ Clear response ID
+    }
+
+    // ✅ NEW: Handle response cancellation confirmation
+    if (event.type === "response.cancelled") {
+      logger.info("✅ [GPT] Response cancelled successfully");
+      currentResponseId = null;
     }
   });
 
   socket.on("audio-chunk", (chunkArrayBuffer) => {
     try {
-      // chunkArrayBuffer is binary ArrayBuffer from FE
       const base64Audio = Buffer.from(chunkArrayBuffer).toString("base64");
       gptWs.send(
         JSON.stringify({
@@ -57,15 +149,21 @@ export async function handleRealtimeAI(socket) {
           audio: base64Audio,
         })
       );
-      logger.info("🎤 Received audio chunk from FE and appended to GPT");
+      logger.debug("🎤 [FLOW] Audio chunk → GPT");
     } catch (err) {
-      logger.error("❌ Error appending audio chunk to GPT:", err);
+      logger.error("❌ [FLOW] Error forwarding audio to GPT:", err);
     }
   });
 
-  // Cleanup
   socket.on("disconnect", () => {
-    logger.info(`🔴 Socket disconnected: ${socket.id}`);
+    logger.info(`🔴 [SOCKET] Client disconnected: ${socket.id}`);
+
+    // Close current context if exists
+    if (currentContextId) {
+      closeContext(currentContextId);
+    }
+
     gptWs?.close();
+    closeElevenLabs("manual-disconnect");
   });
 }
