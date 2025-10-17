@@ -49,7 +49,6 @@ export async function handleRealtimeAI(socket) {
 
   gptWs.on("message", (msg) => {
     const event = JSON.parse(msg.toString());
-    logger.info(`📩 [GPT] Event: ${event.type}`);
 
     // ✅ NEW: Handle interruption (user starts speaking while AI is responding)
     if (event.type === "input_audio_buffer.speech_started") {

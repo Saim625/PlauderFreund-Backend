@@ -6,6 +6,7 @@ import {
   ELEVENLABS_VOICE_ID,
 } from "../config/env.js";
 import { v4 as uuidv4 } from "uuid";
+import logger from "../utils/logger.js";
 
 let ws = null;
 let isReady = false;
@@ -24,27 +25,21 @@ export function initElevenLabs(onAudioChunk) {
 
   // ✅ Reuse existing healthy connection
   if (ws && ws.readyState === WebSocket.OPEN && isReady) {
-    console.log("♻️ [ELEVEN] Reusing existing connection");
     return;
   }
 
   // ✅ Don't allow multiple simultaneous connection attempts
   if (isConnecting) {
-    console.log("⏳ [ELEVEN] Already connecting, please wait...");
     return;
   }
 
   // ✅ Handle connection in progress
   if (ws && ws.readyState === WebSocket.CONNECTING) {
-    console.log("⏳ [ELEVEN] Connection already in progress, waiting...");
     return;
   }
 
   // ✅ Cleanup old connection if exists and not connecting
   if (ws) {
-    console.log(
-      `🧹 [ELEVEN] Cleaning up old connection (state: ${ws.readyState})`
-    );
     try {
       ws.removeAllListeners();
       // Only close if not in CONNECTING state
@@ -52,7 +47,7 @@ export function initElevenLabs(onAudioChunk) {
         ws.close(1000, "manual-reconnect");
       }
     } catch (e) {
-      console.warn("⚠️ [ELEVEN] Error closing stale WS:", e);
+      logger.error("⚠️ [ELEVEN] Error closing stale WS:", e);
     }
     ws = null;
     isReady = false;
@@ -60,7 +55,6 @@ export function initElevenLabs(onAudioChunk) {
 
   const uri = `${ELEVENLABS_BASE_URL}/text-to-speech/${ELEVENLABS_VOICE_ID}/multi-stream-input?model_id=${ELEVENLABS_MODEL}&output_format=pcm_24000`;
 
-  console.log("🔄 [ELEVEN] Connecting to:", uri);
   isConnecting = true; // ✅ Mark as connecting
 
   ws = new WebSocket(uri, {
@@ -68,7 +62,6 @@ export function initElevenLabs(onAudioChunk) {
   });
 
   ws.on("open", () => {
-    console.log("✅ [ELEVEN] Multi-context WS OPEN");
     isReady = true;
     isConnecting = false; // ✅ Connection successful
     reconnectAttempts = 0;
@@ -79,7 +72,7 @@ export function initElevenLabs(onAudioChunk) {
     try {
       msg = JSON.parse(data);
     } catch (err) {
-      console.error("⚠️ [ELEVEN] Failed to parse message:", err);
+      logger.error("⚠️ [ELEVEN] Failed to parse message:", err);
       return;
     }
 
@@ -88,10 +81,6 @@ export function initElevenLabs(onAudioChunk) {
 
     if (msg.audio) {
       const cleanAudioBase64 = msg.audio.replace(/\s/g, "");
-      console.log(
-        `🎧 [ELEVEN] Audio for ${ctxId} (${isFinal ? "final" : "partial"})`
-      );
-
       onAudioChunkRef?.({
         contextId: ctxId,
         audio: cleanAudioBase64,
@@ -100,38 +89,30 @@ export function initElevenLabs(onAudioChunk) {
     }
 
     if (isFinal) {
-      console.log(`🏁 [ELEVEN] Context ${ctxId} marked final`);
       activeContexts.delete(ctxId);
     }
 
     if (msg.error) {
-      console.error("❌ [ELEVEN] Message error:", msg.error);
+      logger.error("❌ [ELEVEN] Message error:", msg.error);
     }
   });
 
   ws.on("error", (err) => {
-    console.error("❌ [ELEVEN] Socket error:", err);
+    logger.error("❌ [ELEVEN] Socket error:", err);
     isReady = false;
     isConnecting = false; // ✅ Connection failed
 
     if (activeContexts.size > 0) {
-      console.warn(
-        `⚠️ [ELEVEN] Clearing ${activeContexts.size} active contexts due to error`
-      );
       activeContexts.clear();
     }
   });
 
   ws.on("close", (code, reason) => {
-    console.log(`🔌 [ELEVEN] Socket closed (${code}): ${reason}`);
     isReady = false;
     isConnecting = false; // ✅ Connection ended
     ws = null;
 
     if (activeContexts.size > 0) {
-      console.warn(
-        `⚠️ [ELEVEN] Clearing ${activeContexts.size} active contexts on close`
-      );
       activeContexts.clear();
     }
 
@@ -143,16 +124,13 @@ export function initElevenLabs(onAudioChunk) {
           1000 * Math.pow(2, reconnectAttempts - 1),
           10000
         );
-        console.log(
-          `⏳ [ELEVEN] Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`
-        );
 
         clearTimeout(reconnectTimeout);
         reconnectTimeout = setTimeout(() => {
           initElevenLabs(onAudioChunkRef);
         }, delay);
       } else {
-        console.error(
+        logger.error(
           `❌ [ELEVEN] Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached`
         );
       }
@@ -162,12 +140,6 @@ export function initElevenLabs(onAudioChunk) {
 
 export function startContext() {
   if (!ws || ws.readyState !== WebSocket.OPEN || !isReady) {
-    console.warn("⚠️ [ELEVEN] Cannot start context - socket not ready");
-    console.warn(
-      `   ws exists: ${!!ws}, readyState: ${
-        ws?.readyState
-      }, isReady: ${isReady}, isConnecting: ${isConnecting}`
-    );
     return null;
   }
 
@@ -183,16 +155,15 @@ export function startContext() {
       use_speaker_boost: false,
     },
     generation_config: {
-      chunk_length_schedule: [50, 80, 120, 150],
+      chunk_length_schedule: [40, 60, 100, 120],
     },
   };
 
   try {
     ws.send(JSON.stringify(initMsg));
-    console.log(`🆕 [ELEVEN] Initialized context: ${contextId}`);
     return contextId;
   } catch (error) {
-    console.error("❌ [ELEVEN] Error starting context:", error);
+    logger.error("❌ [ELEVEN] Error starting context:", error);
     activeContexts.delete(contextId);
     return null;
   }
@@ -200,12 +171,10 @@ export function startContext() {
 
 export function sendTextToElevenLabs(textChunk, contextId, options = {}) {
   if (!ws || ws.readyState !== WebSocket.OPEN) {
-    console.warn("⚠️ [ELEVEN] Socket not ready, cannot send text");
     return false;
   }
 
   if (!contextId || !activeContexts.has(contextId)) {
-    console.warn("⚠️ [ELEVEN] Invalid or closed context:", contextId);
     return false;
   }
 
@@ -214,40 +183,28 @@ export function sendTextToElevenLabs(textChunk, contextId, options = {}) {
 
   try {
     ws.send(JSON.stringify(payload));
-    console.log(
-      `📤 [ELEVEN] → ${contextId}: "${textChunk.slice(0, 40)}${
-        textChunk.length > 40 ? "..." : ""
-      }"${options.flush ? " (flush)" : ""}`
-    );
     return true;
   } catch (error) {
-    console.error("❌ [ELEVEN] Error sending text:", error);
+    logger.error("❌ [ELEVEN] Error sending text:", error);
     return false;
   }
 }
 
 export function closeContext(contextId) {
   if (!ws || ws.readyState !== WebSocket.OPEN) {
-    console.warn("⚠️ [ELEVEN] Cannot close context - socket not open");
     activeContexts.delete(contextId);
     return false;
   }
 
   if (!contextId || !activeContexts.has(contextId)) {
-    console.warn(
-      "⚠️ [ELEVEN] Attempt to close invalid/already-closed context:",
-      contextId
-    );
     return false;
   }
 
   try {
     ws.send(JSON.stringify({ context_id: contextId, close_context: true }));
-    console.log(`📤 [ELEVEN] close_context sent for ${contextId}`);
     activeContexts.delete(contextId);
     return true;
   } catch (error) {
-    console.error("❌ [ELEVEN] Error closing context:", error);
     activeContexts.delete(contextId);
     return false;
   }
@@ -259,23 +216,19 @@ export function closeElevenLabs(reason = "manual") {
   isConnecting = false; // ✅ Reset connecting flag
 
   if (activeContexts.size > 0) {
-    console.log(
-      `🧹 [ELEVEN] Closing ${activeContexts.size} active contexts before shutdown`
-    );
     const contexts = Array.from(activeContexts);
     contexts.forEach((ctxId) => closeContext(ctxId));
   }
 
   if (ws) {
     try {
-      console.log("🧹 [ELEVEN] Closing WebSocket:", reason);
       ws.removeAllListeners();
       // Only close if not already in CONNECTING state
       if (ws.readyState !== WebSocket.CONNECTING) {
         ws.close(1000, reason);
       }
     } catch (e) {
-      console.warn("⚠️ [ELEVEN] Error closing WS:", e);
+      logger.error("⚠️ [ELEVEN] Error closing WS:", e);
     }
     ws = null;
     isReady = false;

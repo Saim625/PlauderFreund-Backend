@@ -1,32 +1,3 @@
-// import { synthesizeSpeech } from "./ttsService.js";
-// import logger from "../utils/logger.js";
-
-// export async function handleError(
-//   err,
-//   socket,
-//   userMessage = "Something went wrong. Please try again."
-// ) {
-//   try {
-//     logger.error(`❌ Pipeline Error: ${err.message}`);
-
-//     const errorText = userMessage;
-
-//     let audioBuffer = null;
-//     try {
-//       audioBuffer = await synthesizeSpeech(errorText);
-//     } catch (ttsErr) {
-//       logger.error(`❌ Failed to convert error to audio: ${ttsErr.message}`);
-//     }
-
-//     socket.emit("error-response", {
-//       message: errorText,
-//       audio: audioBuffer ? audioBuffer.toString("base64") : null,
-//     });
-//   } catch (finalErr) {
-//     logger.error(`❌ ErrorService completely failed: ${finalErr.message}`);
-//   }
-// }
-
 import { synthesizeSpeech } from "./ttsService.js";
 import logger from "../utils/logger.js";
 
