@@ -93,7 +93,8 @@ export function initElevenLabs(onAudioChunk) {
     }
 
     if (msg.error) {
-      logger.error("❌ [ELEVEN] Message error:", msg.error);
+      logger.error("❌ [ELEVEN] Message error:");
+      logger.error("   Error object:", JSON.stringify(msg.error, null, 2)); // ✅ Full error
     }
   });
 
@@ -155,7 +156,7 @@ export function startContext() {
       use_speaker_boost: false,
     },
     generation_config: {
-      chunk_length_schedule: [40, 60, 100, 120],
+      chunk_length_schedule: [50, 60, 100, 120],
     },
   };
 
