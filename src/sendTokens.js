@@ -10,8 +10,11 @@ await mongoose.connect(MONGO_URI);
 console.log("✅ Connected to MongoDB");
 
 const tokens = [
-  { token: "abc123xyz" },
-  { token: "def456uvw" },
+  { token: "abc123wxy" },
+  { token: "def456xyz" },
+  { token: "lmn657uuy" },
+  { token: "opq234rst" },
+
   //   { token: uuidv4() }, // auto-generated random token
 ];
 
