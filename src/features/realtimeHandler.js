@@ -9,15 +9,21 @@ import {
   closeContext,
   closeElevenLabs,
 } from "../services/elevenlabWS.js";
+import MemorySummary from "../models/MemorySummary.js";
 
-export async function handleRealtimeAI(socket) {
+export async function handleRealtimeAI(socket, token) {
   let gptWs;
   let currentContextId = null;
   let isContextClosing = false;
   let currentResponseId = null; // ✅ NEW: Track current GPT response
 
   try {
-    gptWs = await connectToRealtimeAPI();
+    const memory = await MemorySummary.findOne({ token });
+    const summary = memory?.summary || [];
+    console.log(`🧠 Loaded memory summary for token ${token}:`, summary);
+
+    // 🔹 2. Pass it into Realtime connection
+    gptWs = await connectToRealtimeAPI(summary);
     logger.info("✅ [GPT] Connected to Realtime API");
   } catch (err) {
     logger.error("❌ [GPT] Failed to connect:", err);
@@ -86,6 +92,21 @@ export async function handleRealtimeAI(socket) {
       }
     }
 
+    // ✅ NEW: Capture user's transcribed speech
+    if (
+      event.type === "conversation.item.input_audio_transcription.completed"
+    ) {
+      const userTranscript = event.transcript;
+
+      logger.info(`📝 [USER TRANSCRIPT]: "${userTranscript}"`);
+
+      // Send to frontend
+      socket.emit("user-transcript", {
+        text: userTranscript,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     // When GPT starts responding, create new ElevenLabs context
     if (event.type === "response.created") {
       logger.info("🎬 [GPT] Response started");
@@ -118,6 +139,16 @@ export async function handleRealtimeAI(socket) {
 
     // GPT finished generating text
     if (event.type === "response.output_text.done") {
+      const fullAiResponse = event.text;
+
+      logger.info(`🤖 [AI RESPONSE]: "${fullAiResponse}"`);
+
+      // Send to frontend
+      socket.emit("ai-transcript", {
+        text: fullAiResponse,
+        timestamp: new Date().toISOString(),
+      });
+
       logger.info("🏁 [GPT] Text stream done — flushing ElevenLabs buffer");
 
       if (currentContextId && !isContextClosing) {

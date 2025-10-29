@@ -3,55 +3,74 @@ import WebSocket from "ws";
 import logger from "../utils/logger.js";
 import { OPENAI_API_KEY, OPENAI_REALTIME_API } from "../config/env.js";
 
-export async function connectToRealtimeAPI() {
-  // 🔗 1️⃣ Connect directly to GPT Realtime model
-  const ws = new WebSocket(`${OPENAI_REALTIME_API}`, {
-    headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-    },
-  });
+/**
+ * Connect to OpenAI Realtime API
+ * @param {Array|string} [summary=[]] - Optional memory/context from DB
+ * @returns {Promise<WebSocket>}
+ */
+export async function connectToRealtimeAPI(summary = []) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(`${OPENAI_REALTIME_API}`, {
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+    });
 
-  // 🔊 2️⃣ When connected
-  ws.on("open", () => {
-    logger.info("✅ Connected to GPT Realtime API");
+    ws.on("open", () => {
+      logger.info("✅ Connected to GPT Realtime API");
 
-    // 💬 Initial session setup (tone and behavior)
-    ws.send(
-      JSON.stringify({
+      // 🧠 Build memory context
+      const memoryText =
+        Array.isArray(summary) && summary.length
+          ? summary.map((item) => `• ${item}`).join("\n")
+          : "No prior memory available.";
+
+      // 💬 Initial session setup
+      const sessionConfig = {
         type: "session.update",
         session: {
           type: "realtime",
-          model: "gpt-4o-realtime-preview", // adjust if you have a different model name
+          model: "gpt-4o-realtime-preview",
           output_modalities: ["text"],
           audio: {
             input: {
               format: { type: "audio/pcm", rate: 24000 },
               turn_detection: { type: "semantic_vad" },
+              transcription: { model: "whisper-1" },
             },
           },
-          instructions:
-            "You are a kind and patient assistant designed to help elderly german users.Speak clearly, slowly, and with empathy.Avoid using technical or complex language.If the user sounds confused, gently clarify what they might mean.",
+          // 🧩 Context-aware system prompt
+          instructions: `
+You are a kind, patient assistant designed to help elderly German users.
+Speak clearly, slowly, and with empathy. Avoid complex or technical words.
+If the user sounds confused, gently clarify what they might mean.
+
+Here is the user's previous memory/context:
+${memoryText}
+          `.trim(),
         },
-      })
-    );
-  });
-  // 🧠 3️⃣ Log any incoming GPT events
-  ws.on("message", (msg) => {
-    try {
-      const event = JSON.parse(msg.toString());
-      //   logger.info("📩 GPT Event:", event);
-    } catch (err) {
-      logger.error("❌ Error parsing GPT message:", err);
-    }
-  });
+      };
 
-  ws.on("error", (err) => {
-    logger.error("❌ GPT WS Error:", err);
-  });
+      ws.send(JSON.stringify(sessionConfig));
+      resolve(ws);
+    });
 
-  ws.on("close", () => {
-    logger.info("⚠️ GPT Realtime WebSocket closed.");
-  });
+    ws.on("message", (msg) => {
+      try {
+        const event = JSON.parse(msg.toString());
+        // logger.info("📩 GPT Event:", event);
+      } catch (err) {
+        logger.error("❌ Error parsing GPT message:", err);
+      }
+    });
 
-  return ws;
+    ws.on("error", (err) => {
+      logger.error("❌ GPT WS Error:", err);
+      reject(err);
+    });
+
+    ws.on("close", () => {
+      logger.info("⚠️ GPT Realtime WebSocket closed.");
+    });
+  });
 }

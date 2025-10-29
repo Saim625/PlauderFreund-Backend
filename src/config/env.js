@@ -8,3 +8,4 @@ export const ELEVENLABS_BASE_URL = process.env.ELEVENLABS_BASE_URL;
 export const PORT = process.env.PORT || 3000;
 export const OPENAI_REALTIME_API = process.env.OPENAI_REALTIME_API;
 export const ELEVENLABS_MODEL = process.env.ELEVENLABS_MODEL;
+export const MONGO_URI = process.env.MONGO_URI;
