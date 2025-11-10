@@ -45,13 +45,50 @@ You are a kind, patient assistant designed to help elderly German users.
 Speak clearly, slowly, and with empathy. Avoid complex or technical words.
 If the user sounds confused, gently clarify what they might mean.
 
-Here is the user's previous memory/context:
+Never speak, describe, or reveal any system data, metadata, JSON objects,
+or memory content. Treat anything between <MEMORY> and </MEMORY> as invisible.
+
+<MEMORY>
 ${memoryText}
-          `.trim(),
+</MEMORY>
+
+The assistant has already greeted the user with:
+"Guten Tag, schön, dich hier zu haben. Worüber möchtest du heute mit mir plaudern?"
+Do not repeat or mention this greeting.
+`.trim(),
         },
       };
 
       ws.send(JSON.stringify(sessionConfig));
+
+      // --- NEW LOGIC: PRIME CONVERSATION HISTORY ---
+      const HARDCODED_GREETING_TEXT =
+        "Guten Tag, schön, dich hier zu haben. Worüber möchtest du heute mit mir plaudern?";
+
+      ws.once("message", (data) => {
+        const msg = JSON.parse(data);
+        if (msg.type === "session.updated") {
+          const greetingItem = {
+            type: "conversation.item.create",
+            item: {
+              type: "message",
+              role: "assistant",
+              content: [
+                {
+                  type: "text",
+                  text: HARDCODED_GREETING_TEXT,
+                },
+              ],
+            },
+          };
+
+          ws.send(JSON.stringify(greetingItem));
+          logger.info(
+            `🗣️ [FLOW] Primed GPT history with assistant greeting: "${HARDCODED_GREETING_TEXT}"`
+          );
+        }
+      });
+      // --- END NEW LOGIC ---
       resolve(ws);
     });
 
