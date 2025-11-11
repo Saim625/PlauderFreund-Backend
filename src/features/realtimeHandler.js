@@ -332,19 +332,11 @@ export async function handleRealtimeAI(socket, token) {
       const base64Audio = Buffer.from(chunkArrayBuffer).toString("base64");
       const audioSize = base64Audio.length;
 
-      logger.info(
-        `🎤 [FE->BE] Received audio chunk | Size: ${audioSize} | Socket: ${socket.id}`
-      );
-
       gptWs.send(
         JSON.stringify({
           type: "input_audio_buffer.append",
           audio: base64Audio,
         })
-      );
-
-      logger.info(
-        `🎤 [BE->GPT] Forwarded audio chunk to GPT | Size: ${audioSize}`
       );
     } catch (err) {
       logger.error(
