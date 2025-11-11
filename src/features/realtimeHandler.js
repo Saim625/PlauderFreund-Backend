@@ -60,7 +60,7 @@ export async function handleRealtimeAI(socket, token) {
 
   gptWs.on("message", (msg) => {
     const event = JSON.parse(msg.toString());
-    logger.debug(
+    logger.info(
       `📨 [GPT->BE] Received event: ${event.type} | Socket: ${socket.id}`
     );
 
@@ -208,10 +208,10 @@ export async function handleRealtimeAI(socket, token) {
       const textChunk = event.delta;
       textChunkCount++;
 
-      logger.debug(
+      logger.info(
         `📝 [TEXT CHUNK #${textChunkCount}] Length: ${textChunk.length} | Context: ${currentContextId} | Socket: ${socket.id}`
       );
-      logger.debug(
+      logger.info(
         `📝 [TEXT CHUNK CONTENT] "${textChunk.substring(0, 50)}${
           textChunk.length > 50 ? "..." : ""
         }"`
@@ -243,11 +243,11 @@ export async function handleRealtimeAI(socket, token) {
         return;
       }
 
-      logger.debug(
+      logger.info(
         `📤 [BE->ELEVEN] Sending text chunk #${textChunkCount} to context ${currentContextId}`
       );
       const sendResult = sendTextToElevenLabs(textChunk, currentContextId);
-      logger.debug(`📤 [BE->ELEVEN] Send result: ${sendResult}`);
+      logger.info(`📤 [BE->ELEVEN] Send result: ${sendResult}`);
     }
 
     // ------------------------------------------------------------------------
@@ -332,7 +332,7 @@ export async function handleRealtimeAI(socket, token) {
       const base64Audio = Buffer.from(chunkArrayBuffer).toString("base64");
       const audioSize = base64Audio.length;
 
-      logger.debug(
+      logger.info(
         `🎤 [FE->BE] Received audio chunk | Size: ${audioSize} | Socket: ${socket.id}`
       );
 
@@ -343,7 +343,7 @@ export async function handleRealtimeAI(socket, token) {
         })
       );
 
-      logger.debug(
+      logger.info(
         `🎤 [BE->GPT] Forwarded audio chunk to GPT | Size: ${audioSize}`
       );
     } catch (err) {

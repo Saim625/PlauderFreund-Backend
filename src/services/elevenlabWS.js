@@ -42,7 +42,7 @@ export function ensureElevenLabsReady(timeout = READY_TIMEOUT) {
       checkCount++;
       const elapsed = Date.now() - startTime;
 
-      logger.debug(
+      logger.info(
         `🔍 [READY CHECK #${checkCount}] wsState: ${ws?.readyState}, isReady: ${isReady}, elapsed: ${elapsed}ms`
       );
 
@@ -145,7 +145,7 @@ export function initElevenLabs() {
     const ctxId = msg.contextId || msg.context_id;
     const isFinal = msg.is_final ?? msg.isFinal;
 
-    logger.debug(
+    logger.info(
       `📨 [ELEVEN->BE] Message received | contextId: ${ctxId}, hasAudio: ${!!msg.audio}, isFinal: ${isFinal}`
     );
 
@@ -157,7 +157,7 @@ export function initElevenLabs() {
         const cleanAudioBase64 = msg.audio.replace(/\s/g, "");
         const audioSize = cleanAudioBase64.length;
 
-        logger.debug(
+        logger.info(
           `🔊 [AUDIO CHUNK] contextId: ${ctxId}, size: ${audioSize}, isFinal: ${isFinal}, socketId: ${socket.id}`
         );
 
@@ -167,11 +167,11 @@ export function initElevenLabs() {
           isFinal: isFinal,
         };
 
-        logger.debug(
+        logger.info(
           `📤 [BE->FE] Emitting 'ai-audio-chunk' to Socket ${socket.id}`
         );
         socket.emit("ai-audio-chunk", audioObj);
-        logger.debug(`✅ [BE->FE] Audio chunk emitted successfully`);
+        logger.info(`✅ [BE->FE] Audio chunk emitted successfully`);
       } else {
         logger.warn(
           `⚠️ [AUDIO CHUNK] No socket found for contextId: ${ctxId} | activeContexts: ${Array.from(
@@ -351,7 +351,7 @@ export function startContext(socket) {
 
   try {
     logger.info(`📤 [START CONTEXT] Sending init message to ElevenLabs`);
-    logger.debug(`📋 [INIT MESSAGE]`, JSON.stringify(initMsg, null, 2));
+    logger.info(`📋 [INIT MESSAGE]`, JSON.stringify(initMsg, null, 2));
 
     ws.send(JSON.stringify(initMsg));
 
@@ -387,7 +387,7 @@ export function sendTextToElevenLabs(textChunk, contextId, options = {}) {
   const chunkLength = textChunk.length;
   const isFlush = options.flush || false;
 
-  logger.debug(
+  logger.info(
     `📤 [SEND TEXT] contextId: ${contextId}, length: ${chunkLength}, flush: ${isFlush}`
   );
 
@@ -414,9 +414,9 @@ export function sendTextToElevenLabs(textChunk, contextId, options = {}) {
   }
 
   try {
-    logger.debug(`📋 [PAYLOAD]`, JSON.stringify(payload));
+    logger.info(`📋 [PAYLOAD]`, JSON.stringify(payload));
     ws.send(JSON.stringify(payload));
-    logger.debug(`✅ [SEND TEXT] Text sent successfully to ElevenLabs`);
+    logger.info(`✅ [SEND TEXT] Text sent successfully to ElevenLabs`);
     return true;
   } catch (error) {
     logger.error(`❌ [SEND TEXT] Error sending text:`, error);
@@ -545,7 +545,7 @@ export function getElevenLabsStatus() {
     wsState: ws?.readyState,
   };
 
-  logger.debug(`📊 [GET STATUS]`, JSON.stringify(status, null, 2));
+  logger.info(`📊 [GET STATUS]`, JSON.stringify(status, null, 2));
 
   return status;
 }
