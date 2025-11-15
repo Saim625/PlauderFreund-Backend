@@ -14,7 +14,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: ["https://plauder-freund-elevenlabs-frontend.vercel.app"], // ✅ your frontend URL
+    origin: ["https://plauderfreund.de"], // ✅ your frontend URL
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true, // if you're using cookies or auth headers
@@ -32,9 +32,9 @@ const httpServer = createServer(app);
 // Updated Socket.IO config
 const io = new Server(httpServer, {
   cors: {
-    origin: "https://plauder-freund-elevenlabs-frontend.vercel.app",
+    origin: "https://plauderfreund.de",
     methods: ["GET", "POST"],
-    credentials: false,
+    credentials: true,
   },
   transports: ["polling", "websocket"], // Add polling fallback
   allowEIO3: true,
