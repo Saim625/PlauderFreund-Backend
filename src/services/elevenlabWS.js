@@ -114,9 +114,20 @@ export function initElevenLabs() {
 
       if (socket) {
         const cleanAudioBase64 = msg.audio.replace(/\s/g, "");
+        const chunkSize = cleanAudioBase64.length;
+
+        // 🟦 Add chunk index tracking per context
+        if (!global.chunkIndexMap) global.chunkIndexMap = new Map();
+        const currentIndex = global.chunkIndexMap.get(ctxId) || 0;
+        global.chunkIndexMap.set(ctxId, currentIndex + 1);
+
+        console.log(
+          `[SEND_CHUNK] ctx=${ctxId} idx=${currentIndex} size=${chunkSize} ts=${Date.now()}`
+        );
 
         const audioObj = {
           contextId: ctxId,
+          index: currentIndex,
           audio: cleanAudioBase64,
           isFinal: isFinal,
         };
