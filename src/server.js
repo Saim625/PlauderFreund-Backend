@@ -18,7 +18,6 @@ app.use(
     origin: ["https://plauderfreund.de"], // ✅ your frontend URL
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true, // if you're using cookies or auth headers
   })
 );
 
