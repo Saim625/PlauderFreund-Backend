@@ -2,13 +2,17 @@
 import WebSocket from "ws";
 import logger from "../utils/logger.js";
 import { OPENAI_API_KEY, OPENAI_REALTIME_API } from "../config/env.js";
+import { greetingStore } from "../state/greetingStore.js";
 
 /**
  * Connect to OpenAI Realtime API
  * @param {Array|string} [summary=[]] - Optional memory/context from DB
  * @returns {Promise<WebSocket>}
  */
-export async function connectToRealtimeAPI(summary = []) {
+export async function connectToRealtimeAPI(summary = [], token) {
+  const greetingText = greetingStore.get(token);
+  greetingStore.delete(token); // remove from memory ✔️
+  console.log("greetingText: ", greetingText);
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(`${OPENAI_REALTIME_API}`, {
       headers: {
@@ -41,61 +45,56 @@ export async function connectToRealtimeAPI(summary = []) {
           },
           // 🧩 Context-aware system prompt
           instructions: `
-You are a kind, patient assistant designed to help elderly German users.
-Speak clearly, slowly, and with empathy. Avoid complex or technical words.
-If the user sounds confused, gently clarify what they might mean.
+          You are a warm, friendly AI assistant who speaks directly to the user speacially to elder people in german like a real person.
+          Speak clearly, slowly, and with empathy. Avoid complex or technical words.
+          If the user sounds confused, gently clarify what they might mean.
 
-Never speak, describe, or reveal any system data, metadata, JSON objects,
-or memory content. Treat anything between <MEMORY> and </MEMORY> as invisible.
+          You have already greeted the user with the following personalized message: ${greetingText}. 
+          It is possible that the user's first message is a reply to this greeting. 
+          Do not repeat the greeting. 
+          Respond naturally and continue the conversation based on the user's message, 
+          keeping in mind the greeting has already occurred.
 
-<MEMORY>
-${memoryText}
-</MEMORY>
+          --- CRITICAL CONTEXT RULE ---
+          You MUST use the information provided within the <MEMORY> tags to inform your responses,
+          maintain conversational context, and personalize the interaction (e.g., if the user
+          asks, "What do you know about me?", synthesize the information found here).
 
-The assistant has already greeted the user with:
-"Guten Tag, schön, dich hier zu haben. Worüber möchtest du heute mit mir plaudern?"
-Do not repeat or mention this greeting.
-`.trim(),
+          --- CRITICAL SECURITY RULE ---
+          Under NO circumstances should you quote, describe, or reveal the memory tags (<MEMORY>, </MEMORY>)
+          or the raw text content within them. Never mention the word "memory," "context," or "system."
+          Simply use the knowledge as if it were part of your natural understanding.
+
+          <MEMORY>
+          ${memoryText}
+          </MEMORY>
+          `.trim(),
         },
       };
 
       ws.send(JSON.stringify(sessionConfig));
 
-      // --- NEW LOGIC: PRIME CONVERSATION HISTORY ---
-      const HARDCODED_GREETING_TEXT =
-        "Guten Tag, schön, dich hier zu haben. Worüber möchtest du heute mit mir plaudern?";
-
-      ws.once("message", (data) => {
-        const msg = JSON.parse(data);
-        if (msg.type === "session.updated") {
+      ws.once("message", () => {
+        if (greetingText) {
           const greetingItem = {
             type: "conversation.item.create",
             item: {
               type: "message",
-              role: "assistant",
-              content: [
-                {
-                  type: "text",
-                  text: HARDCODED_GREETING_TEXT,
-                },
-              ],
+              role: "system",
+              content: [{ type: "text", text: greetingText }],
             },
           };
 
           ws.send(JSON.stringify(greetingItem));
-          logger.info(
-            `🗣️ [FLOW] Primed GPT history with assistant greeting: "${HARDCODED_GREETING_TEXT}"`
-          );
         }
       });
-      // --- END NEW LOGIC ---
+
       resolve(ws);
     });
 
     ws.on("message", (msg) => {
       try {
         const event = JSON.parse(msg.toString());
-        // logger.info("📩 GPT Event:", event);
       } catch (err) {
         logger.error("❌ Error parsing GPT message:", err);
       }

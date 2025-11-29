@@ -9,6 +9,7 @@ import { DB_CONNECTION } from "./config/database.js";
 import { authRouter } from "./routes/auth.js";
 import { memoryRouter } from "./routes/memory.js";
 import cors from "cors";
+import { greetingRouter } from "./routes/greeting.js";
 
 const app = express();
 
@@ -26,6 +27,7 @@ app.use(express.json());
 app.use("/", healthRoute);
 app.use("/api/auth", authRouter);
 app.use("/api/memory", memoryRouter);
+app.use("/api", greetingRouter);
 
 const httpServer = createServer(app);
 

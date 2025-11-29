@@ -29,7 +29,7 @@ export async function handleRealtimeAI(socket, token) {
     const summary = memory?.summary || [];
 
     // 🔥 STEP 4: Connect to GPT Realtime API
-    gptWs = await connectToRealtimeAPI(summary);
+    gptWs = await connectToRealtimeAPI(summary, token);
   } catch (err) {
     logger.error(
       `❌ [INIT] Initialization failed for Socket ${socket.id}:`,

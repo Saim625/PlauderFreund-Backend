@@ -79,6 +79,7 @@ The conversation is formatted with speaker roles (USER: and ASSISTANT:).
 
 Conversation History:
 """${text}"""`;
+
   const gptResponse = await getGPTResponse([{ role: "user", content: prompt }]);
   let cleaned = gptResponse
     .replace(/```json/g, "")
