@@ -10,14 +10,17 @@ import { authRouter } from "./routes/auth.js";
 import { memoryRouter } from "./routes/memory.js";
 import cors from "cors";
 import { greetingRouter } from "./routes/greeting.js";
+import { adminRouter } from "./routes/adminDashboardRoutes/adminDashboardRoutes.js";
+import { actionRouter } from "./routes/adminDashboardRoutes/userManagementRoutes/actions.js";
 
 const app = express();
 
 app.use(
   cors({
     origin: ["https://plauderfreund.de"], // ✅ your frontend URL
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
   })
 );
 
@@ -27,6 +30,8 @@ app.use("/", healthRoute);
 app.use("/api/auth", authRouter);
 app.use("/api/memory", memoryRouter);
 app.use("/api", greetingRouter);
+app.use("/api", adminRouter);
+app.use("/api", actionRouter);
 
 const httpServer = createServer(app);
 

@@ -10,13 +10,14 @@ await mongoose.connect(MONGO_URI);
 console.log("✅ Connected to MongoDB");
 
 const tokens = [
-  { token: "abc123wxy" },
-  { token: "def456xyz" },
-  { token: "lmn657uuy" },
-  { token: "opq234rst" },
-  { token: "123mno456" },
-  { token: "mno333wse" },
-  { token: "seo324qwq" },
+  { token: "abc111def", isAdmin: true },
+  // { token: "abc123wxy" },
+  // { token: "def456xyz" },
+  // { token: "lmn657uuy" },
+  // { token: "opq234rst" },
+  // { token: "123mno456" },
+  // { token: "mno333wse" },
+  // { token: "seo324qwq" },
 
   //   { token: uuidv4() }, // auto-generated random token
 ];
