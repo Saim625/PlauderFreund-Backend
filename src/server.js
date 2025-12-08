@@ -15,14 +15,17 @@ import { actionRouter } from "./routes/adminDashboardRoutes/userManagementRoutes
 
 const app = express();
 
-app.use(
-  cors({
-    origin: ["https://plauderfreund.de"], // ✅ your frontend URL
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
-app.options("*", cors());
+const corsOptions = {
+  origin: ["https://plauderfreund.de", "http://localhost:5173"],
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true, // optional but recommended
+};
+
+app.use(cors(corsOptions));
+
+app.options(/.*/, cors(corsOptions));
+
 app.use(express.json());
 
 app.use("/", healthRoute);
