@@ -20,7 +20,6 @@ app.use(
     origin: ["https://plauderfreund.de"], // ✅ your frontend URL
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
   })
 );
 
@@ -40,7 +39,6 @@ const io = new Server(httpServer, {
   cors: {
     origin: "https://plauderfreund.de",
     methods: ["GET", "POST"],
-    credentials: true,
   },
   transports: ["polling", "websocket"], // Add polling fallback
   allowEIO3: true,
