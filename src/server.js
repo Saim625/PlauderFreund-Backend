@@ -12,6 +12,7 @@ import cors from "cors";
 import { greetingRouter } from "./routes/greeting.js";
 import { adminRouter } from "./routes/adminDashboardRoutes/adminDashboardRoutes.js";
 import { actionRouter } from "./routes/adminDashboardRoutes/userManagementRoutes/actions.js";
+import { adminActionRouter } from "./routes/adminDashboardRoutes/adminManagementRoutes/actions.js";
 
 const app = express();
 
@@ -34,6 +35,7 @@ app.use("/api/memory", memoryRouter);
 app.use("/api", greetingRouter);
 app.use("/api", adminRouter);
 app.use("/api", actionRouter);
+app.use("/api", adminActionRouter);
 
 const httpServer = createServer(app);
 

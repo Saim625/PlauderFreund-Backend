@@ -1,14 +1,36 @@
 // routes/auth.js
 import express from "express";
 import UserAccessToken from "../models/UserAccessToken.js";
-import { verifyToken } from "../middleware/verifyToken.js";
+import AdminAccessToken from "../models/AdminAccessToken.js";
+import { verifyUserToken } from "../middleware/verifyUserToken.js";
+import { verifyAdminToken } from "../middleware/verifyAdminToken.js";
 
 export const authRouter = express.Router();
 
-authRouter.get("/verify-token", verifyToken("any"), (req, res) => {
+/**
+ * Verify a user token
+ * Public or protected routes for normal users
+ */
+authRouter.get("/verify-user-token", verifyUserToken(), (req, res) => {
   res.json({
     success: true,
-    message: "Token verified",
-    isAdmin: req.user.isAdmin,
+    message: "User token verified",
   });
 });
+
+/**
+ * Verify an admin token
+ * Only for admins
+ */
+authRouter.get(
+  "/verify-admin-token",
+  verifyAdminToken([]), // empty array → no specific permission required
+  (req, res) => {
+    res.json({
+      success: true,
+      message: "Admin token verified",
+      role: req.admin.role,
+      permissions: req.admin.permissions,
+    });
+  }
+);
