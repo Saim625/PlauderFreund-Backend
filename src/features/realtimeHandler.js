@@ -9,6 +9,7 @@ import {
   getElevenLabsStatus,
 } from "../services/elevenlabWS.js";
 import MemorySummary from "../models/MemorySummary.js";
+import { getVoiceConfigForToken } from "../utils/getVoiceConfigForToken.js";
 
 export async function handleRealtimeAI(socket, token) {
   let gptWs;
@@ -19,8 +20,9 @@ export async function handleRealtimeAI(socket, token) {
   let textChunkCount = 0;
   let audioChunkCount = 0;
 
+  const voiceConfig = await getVoiceConfigForToken(token);
   try {
-    initElevenLabs();
+    initElevenLabs(voiceConfig.voiceId);
 
     // 🔥 STEP 2: Wait for ElevenLabs to be ready (CRITICAL FIX)
     await ensureElevenLabsReady();
@@ -115,7 +117,7 @@ export async function handleRealtimeAI(socket, token) {
       }
 
       // 4️⃣ Start new ElevenLabs context
-      currentContextId = startContext(socket);
+      currentContextId = startContext(voiceConfig, socket);
 
       if (!currentContextId) {
         socket.emit("ai-error", { message: "TTS context creation failed" });

@@ -13,6 +13,8 @@ import { greetingRouter } from "./routes/greeting.js";
 import { adminRouter } from "./routes/adminDashboardRoutes/adminDashboardRoutes.js";
 import { actionRouter } from "./routes/adminDashboardRoutes/userManagementRoutes/actions.js";
 import { adminActionRouter } from "./routes/adminDashboardRoutes/adminManagementRoutes/actions.js";
+import { summaryEditorRouter } from "./routes/adminDashboardRoutes/userManagementRoutes/summaryEditorRoutes/summaryEditorAction.js";
+import { personalityActionRouter } from "./routes/adminDashboardRoutes/personalityConfigRoutes/personalityActions.js";
 
 const app = express();
 
@@ -36,6 +38,8 @@ app.use("/api", greetingRouter);
 app.use("/api", adminRouter);
 app.use("/api", actionRouter);
 app.use("/api", adminActionRouter);
+app.use("/api", summaryEditorRouter);
+app.use("/api", personalityActionRouter);
 
 const httpServer = createServer(app);
 

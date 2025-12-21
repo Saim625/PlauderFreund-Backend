@@ -3,6 +3,7 @@ import MemorySummary from "../models/MemorySummary.js";
 import { getGPTResponse } from "../services/gptService.js";
 import { generateGreetingAudio } from "../services/generateGreetingAudio.js";
 import { greetingStore } from "../state/greetingStore.js";
+import { getVoiceConfigForToken } from "../utils/getVoiceConfigForToken.js";
 
 export const greetingRouter = express.Router();
 
@@ -16,13 +17,16 @@ greetingRouter.post("/generate-greeting", async (req, res) => {
     const memory = await MemorySummary.findOne({ token });
     const summary = memory?.summary || "a new user";
 
+    // ✅ Fetch personality / voice config here
+    const voiceConfig = await getVoiceConfigForToken(token);
+
     const prompt = [
       {
         role: "system",
-        content: `You are a warm, friendly AI assistant who speaks directly to the user like a real human in german.
+        content: `You are a warm, friendly AI assistant who speaks directly to the user like a real human in German.
         Your job is to create a completely unique greeting every time — never generic, never robotic.
-        Use the users personality and biography and find name from biography and use it in greeting to make the greeting personal and meaningful.
-        Keep it 1-2 short conversational sentences. No lists, no emojis, no quotes.`,
+        Use the user's personality and biography, extract their name if present, and make the greeting personal.
+        Keep it 1–2 short conversational sentences.`,
       },
       {
         role: "user",
@@ -36,16 +40,16 @@ greetingRouter.post("/generate-greeting", async (req, res) => {
     ];
 
     const greetingText = await getGPTResponse(prompt);
-    console.log("greetin", greetingText);
 
     greetingStore.set(token, greetingText);
 
-    const audioBuffer = await generateGreetingAudio(greetingText);
+    // ✅ SAME config used for greeting audio
+    const audioBuffer = await generateGreetingAudio(greetingText, voiceConfig);
 
-    // Convert to Base64
-    const base64Audio = audioBuffer.toString("base64");
-
-    res.status(200).json({ text: greetingText, audio: base64Audio });
+    res.status(200).json({
+      text: greetingText,
+      audio: audioBuffer.toString("base64"),
+    });
   } catch (err) {
     console.error("Error generating greeting:", err);
     res.status(500).json({ error: err.message });

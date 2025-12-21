@@ -3,6 +3,8 @@ import express from "express";
 import UserAccessToken from "../../../models/UserAccessToken.js";
 import { verifyAdminToken } from "../../../middleware/verifyAdminToken.js";
 import { v4 as uuidv4 } from "uuid";
+import MemorySummary from "../../../models/MemorySummary.js";
+import PersonalityConfig from "../../../models/PersonalityConfig.js";
 
 export const actionRouter = express.Router();
 
@@ -13,6 +15,7 @@ actionRouter.put(
   async (req, res) => {
     try {
       const userTokenId = req.params.id;
+      console.log(userTokenId);
       const userRecord = await UserAccessToken.findById(userTokenId);
 
       if (!userRecord) {
@@ -116,6 +119,10 @@ actionRouter.post(
         isActive: true,
       });
 
+      await PersonalityConfig.create({
+        userToken: token,
+      });
+
       return res.json({
         success: true,
         message: "User invitation token generated",
@@ -128,6 +135,39 @@ actionRouter.post(
       res.status(500).json({
         success: false,
         message: "Server error while generating token",
+      });
+    }
+  }
+);
+
+actionRouter.get(
+  "/user/summary/:token",
+  verifyAdminToken("canAccessMemoryEditor"),
+  async (req, res) => {
+    try {
+      const userToken = req.params.token;
+
+      const userSummary = await MemorySummary.findOne({ token: userToken });
+
+      if (!userSummary) {
+        return res.status(404).json({
+          success: false,
+          message: "User Summary Not Found",
+        });
+      }
+
+      // Return the data
+      return res.status(200).json({
+        success: true,
+        token: userSummary.token,
+        summary: userSummary.summary,
+      });
+    } catch (err) {
+      // FIX 3: Log the error for the developer
+      console.error("Fetch Summary Error:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Internal Server Error",
       });
     }
   }

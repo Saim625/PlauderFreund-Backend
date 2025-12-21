@@ -3,7 +3,6 @@ import {
   ELEVENLABS_API_KEY,
   ELEVENLABS_BASE_URL,
   ELEVENLABS_MODEL,
-  ELEVENLABS_VOICE_ID,
 } from "../config/env.js";
 import { v4 as uuidv4 } from "uuid";
 import logger from "../utils/logger.js";
@@ -54,7 +53,8 @@ export function ensureElevenLabsReady(timeout = READY_TIMEOUT) {
 /**
  * Initialize (or reuse) the multi-context WebSocket connection
  */
-export function initElevenLabs() {
+export function initElevenLabs(voiceId) {
+  console.log(voiceId);
   // Reuse existing healthy connection
   if (ws && ws.readyState === WebSocket.OPEN && isReady) {
     return;
@@ -84,7 +84,7 @@ export function initElevenLabs() {
     isReady = false;
   }
 
-  const uri = `${ELEVENLABS_BASE_URL}/text-to-speech/${ELEVENLABS_VOICE_ID}/multi-stream-input?model_id=${ELEVENLABS_MODEL}&output_format=pcm_24000`;
+  const uri = `${ELEVENLABS_BASE_URL}/text-to-speech/${voiceId}/multi-stream-input?model_id=${ELEVENLABS_MODEL}&output_format=pcm_24000`;
   isConnecting = true;
 
   ws = new WebSocket(uri, {
@@ -240,7 +240,7 @@ export function initElevenLabs() {
 /**
  * Start a new context for a user session
  */
-export function startContext(socket) {
+export function startContext(voiceConfig, socket) {
   // Check if WebSocket is ready
   if (!ws || ws.readyState !== WebSocket.OPEN || !isReady) {
     logger.error(
@@ -252,15 +252,36 @@ export function startContext(socket) {
     return null;
   }
 
+  console.log(voiceConfig);
+
   const contextId = uuidv4();
   const initMsg = {
     text: " ",
-    context_id: contextId,
+    context_id: uuidv4(),
+
     voice_settings: {
-      stability: 0.5,
+      stability:
+        voiceConfig.empathyLevel === "high"
+          ? 0.35
+          : voiceConfig.empathyLevel === "medium"
+          ? 0.55
+          : 0.75,
       similarity_boost: 0.8,
+      style:
+        voiceConfig.empathyLevel === "high"
+          ? 0.65
+          : voiceConfig.empathyLevel === "medium"
+          ? 0.3
+          : 0.15,
       use_speaker_boost: false,
+      speed:
+        voiceConfig.speakingSpeed === "slow"
+          ? 0.7
+          : voiceConfig.speakingSpeed === "fast"
+          ? 1.2
+          : 1.0,
     },
+
     generation_config: {
       chunk_length_schedule: [50, 60, 100, 120],
       auto_mode: true,
@@ -268,6 +289,7 @@ export function startContext(socket) {
   };
 
   try {
+    console.log(initMsg);
     ws.send(JSON.stringify(initMsg));
 
     // Register context after successful send
