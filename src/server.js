@@ -19,7 +19,7 @@ import { personalityActionRouter } from "./routes/adminDashboardRoutes/personali
 const app = express();
 
 const corsOptions = {
-  origin: ["https://plauderfreund.de", "http://localhost:5173"],
+  origin: ["*"],
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true, // optional but recommended
@@ -46,7 +46,7 @@ const httpServer = createServer(app);
 // Updated Socket.IO config
 const io = new Server(httpServer, {
   cors: {
-    origin: "https://plauderfreund.de",
+    origin: "*",
     methods: ["GET", "POST"],
   },
   transports: ["polling", "websocket"], // Add polling fallback
