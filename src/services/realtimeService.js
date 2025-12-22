@@ -4,7 +4,7 @@ import logger from "../utils/logger.js";
 import { OPENAI_API_KEY, OPENAI_REALTIME_API } from "../config/env.js";
 import { greetingStore } from "../state/greetingStore.js";
 import PersonalityConfig from "../models/PersonalityConfig.js";
-import { buildOpenAIPrompt } from "./buildopenAiPrompt.js";
+import { buildOpenAIPrompt } from "./buildOpenAiPrompt.js";
 
 /**
  * Connect to OpenAI Realtime API
