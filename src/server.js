@@ -15,6 +15,7 @@ import { actionRouter } from "./routes/adminDashboardRoutes/userManagementRoutes
 import { adminActionRouter } from "./routes/adminDashboardRoutes/adminManagementRoutes/actions.js";
 import { summaryEditorRouter } from "./routes/adminDashboardRoutes/userManagementRoutes/summaryEditorRoutes/summaryEditorAction.js";
 import { personalityActionRouter } from "./routes/adminDashboardRoutes/personalityConfigRoutes/personalityActions.js";
+import { adminPasswordRouter } from "./routes/adminPasswordRecovery/passwordRecovery.js";
 
 const app = express();
 
@@ -40,6 +41,7 @@ app.use("/api", actionRouter);
 app.use("/api", adminActionRouter);
 app.use("/api", summaryEditorRouter);
 app.use("/api", personalityActionRouter);
+app.use("/api", adminPasswordRouter);
 
 const httpServer = createServer(app);
 

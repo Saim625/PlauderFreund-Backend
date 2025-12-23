@@ -9,3 +9,7 @@ export const PORT = process.env.PORT || 3000;
 export const OPENAI_REALTIME_API = process.env.OPENAI_REALTIME_API;
 export const ELEVENLABS_MODEL = process.env.ELEVENLABS_MODEL;
 export const MONGO_URI = process.env.MONGO_URI;
+export const ADMIN_JWT_SECRET = process.env.ADMIN_JWT_SECRET;
+export const EMAIL_PASS = process.env.EMAIL_PASS;
+export const FRONTEND_URL = process.env.FRONTEND_URL;
+export const EMAIL_USER = process.env.EMAIL_USER;
