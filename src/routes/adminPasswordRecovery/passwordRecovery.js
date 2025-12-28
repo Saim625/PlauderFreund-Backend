@@ -47,7 +47,7 @@ adminPasswordRouter.post("/admin/forgot-password", async (req, res) => {
     });
 
     const mailOptions = {
-      from: `"PlauderFreund Admin" <${process.env.EMAIL_USER}>`,
+      from: `"PlauderFreund Admin" <${EMAIL_USER}>`,
       to: email,
       subject: "Reset your admin password",
       html: `<p>Click the link below to reset your password:</p>

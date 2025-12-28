@@ -11,7 +11,7 @@ const adminAccountPasswordSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
-    default: "kontakt@seniorenassistenz-henning.de",
+    default: "saimsaeed526@gmail.com",
   },
 
   passwordHash: {

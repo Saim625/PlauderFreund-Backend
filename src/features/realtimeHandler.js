@@ -8,6 +8,14 @@ import {
   closeContext,
   getElevenLabsStatus,
 } from "../services/elevenlabWS.js";
+import {
+  initSession,
+  destroySession,
+  markUserAudio,
+  markAiPlaybackDone,
+  markReengagementTriggered,
+  sessions,
+} from "../services/reengagementEngine.js";
 import MemorySummary from "../models/MemorySummary.js";
 import { getVoiceConfigForToken } from "../utils/getVoiceConfigForToken.js";
 
@@ -19,6 +27,8 @@ export async function handleRealtimeAI(socket, token) {
   let contextCleanupTimer = null;
   let textChunkCount = 0;
   let audioChunkCount = 0;
+
+  initSession(socket.id);
 
   const voiceConfig = await getVoiceConfigForToken(token);
   try {
@@ -42,6 +52,35 @@ export async function handleRealtimeAI(socket, token) {
     });
     return;
   }
+
+  socket.on("conversation-started", () => {
+    const s = sessions.get(socket.id);
+    if (!s) return;
+
+    s.conversationActive = true;
+    s.lastUserAudioAt = Date.now();
+    s.lastAiPlaybackFinishedAt = Date.now();
+    s.cooldownUntil = Date.now() + 5000; // grace period
+  });
+
+  socket.on("trigger-reengagement", () => {
+    if (!gptWs || gptWs.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    markReengagementTriggered(socket.id);
+
+    gptWs.send(
+      JSON.stringify({
+        type: "response.create",
+        response: {
+          instructions:
+            "The user has been quiet. Say a short, friendly re-engagement sentence in the language user is talking. Be warm and natural. Do not ask multiple questions.",
+          output_modalities: ["text"],
+        },
+      })
+    );
+  });
 
   gptWs.on("message", (msg) => {
     const event = JSON.parse(msg.toString());
@@ -82,6 +121,14 @@ export async function handleRealtimeAI(socket, token) {
       event.type === "conversation.item.input_audio_transcription.completed"
     ) {
       const userTranscript = event.transcript;
+
+      markUserAudio(socket.id);
+
+      const s = sessions.get(socket.id);
+      if (s) {
+        s.cooldownUntil = 0;
+      }
+
       socket.emit("user-transcript", {
         text: userTranscript,
         timestamp: new Date().toISOString(),
@@ -161,13 +208,11 @@ export async function handleRealtimeAI(socket, token) {
     if (event.type === "response.output_text.done") {
       const fullAiResponse = event.text;
 
-      // Send transcript to frontend
       socket.emit("ai-transcript", {
         text: fullAiResponse,
         timestamp: new Date().toISOString(),
       });
 
-      // Flush ElevenLabs buffer
       if (currentContextId && !isContextClosing) {
         const flushResult = sendTextToElevenLabs("", currentContextId, {
           flush: true,
@@ -181,6 +226,7 @@ export async function handleRealtimeAI(socket, token) {
 
     if (event.type === "response.done") {
       socket.emit("ai-response-done", { response: event.response });
+
       currentResponseId = null;
     }
 
@@ -210,23 +256,34 @@ export async function handleRealtimeAI(socket, token) {
     }
   });
 
-  socket.on("ai-audio-complete", ({ contextId }) => {
-    if (contextId === currentContextId) {
-      // Close the context now that audio is done
-      const closeResult = closeContext(contextId);
-
-      currentContextId = null;
-      isContextClosing = false;
-      textChunkCount = 0;
-      audioChunkCount = 0;
-    } else {
-      logger.error(
-        `⚠️ [AUDIO COMPLETE] Context mismatch! Received: ${contextId}, Current: ${currentContextId}`
+  socket.on("ai-audio-done", ({ contextId }) => {
+    const now = Date.now();
+    if (contextId !== currentContextId) {
+      logger.warn(
+        `⚠️ [AUDIO COMPLETE] Context mismatch. Received=${contextId}, Active=${currentContextId}`
       );
+      return;
     }
+
+    // 🔐 Close GPT context safely
+    try {
+      closeContext(contextId);
+    } catch (err) {
+      logger.error("❌ Failed to close GPT context", err);
+    }
+
+    // 🧹 Reset realtime state
+    currentContextId = null;
+    isContextClosing = false;
+    textChunkCount = 0;
+    audioChunkCount = 0;
+
+    markAiPlaybackDone(socket.id);
   });
 
   socket.on("disconnect", () => {
+    destroySession(socket.id);
+
     // Clean up timer
     if (contextCleanupTimer) {
       clearTimeout(contextCleanupTimer);

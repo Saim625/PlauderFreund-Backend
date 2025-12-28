@@ -6,12 +6,16 @@ const client = new OpenAI({
 });
 
 export async function getGPTResponse(messages) {
-  const completion = await client.chat.completions.create({
-    model: "gpt-4o-mini", // fast + cheap, great for summarization
-    messages,
-    temperature: 0.3, // keep responses consistent
-  });
+  try {
+    const completion = await client.chat.completions.create({
+      model: "gpt-4o-mini", // fast + cheap, great for summarization
+      messages,
+      temperature: 0.3, // keep responses consistent
+    });
 
-  // Extract text output
-  return completion.choices[0].message.content.trim();
+    // Extract text output
+    return completion.choices[0].message.content.trim();
+  } catch (err) {
+    console.log(err.message);
+  }
 }

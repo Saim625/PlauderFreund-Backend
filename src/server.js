@@ -16,6 +16,7 @@ import { adminActionRouter } from "./routes/adminDashboardRoutes/adminManagement
 import { summaryEditorRouter } from "./routes/adminDashboardRoutes/userManagementRoutes/summaryEditorRoutes/summaryEditorAction.js";
 import { personalityActionRouter } from "./routes/adminDashboardRoutes/personalityConfigRoutes/personalityActions.js";
 import { adminPasswordRouter } from "./routes/adminPasswordRecovery/passwordRecovery.js";
+import { startReengagementLoop } from "./services/reengagementEngine.js";
 
 const app = express();
 
@@ -55,6 +56,14 @@ const io = new Server(httpServer, {
   allowEIO3: true,
   pingTimeout: 60000,
   pingInterval: 25000,
+});
+
+startReengagementLoop((socketId) => {
+  const socket = io.sockets.sockets.get(socketId);
+  if (!socket) {
+    return;
+  }
+  socket.emit("reengagement-needed");
 });
 
 io.on("connection", (socket) => {

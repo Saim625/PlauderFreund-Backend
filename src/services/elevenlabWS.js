@@ -6,6 +6,7 @@ import {
 } from "../config/env.js";
 import { v4 as uuidv4 } from "uuid";
 import logger from "../utils/logger.js";
+import { markAiPlaybackDone, markAiSpeaking } from "./reengagementEngine.js";
 
 let ws = null;
 let isReady = false;
@@ -54,7 +55,6 @@ export function ensureElevenLabsReady(timeout = READY_TIMEOUT) {
  * Initialize (or reuse) the multi-context WebSocket connection
  */
 export function initElevenLabs(voiceId) {
-  console.log(voiceId);
   // Reuse existing healthy connection
   if (ws && ws.readyState === WebSocket.OPEN && isReady) {
     return;
@@ -107,7 +107,8 @@ export function initElevenLabs(voiceId) {
     }
 
     const ctxId = msg.contextId || msg.context_id;
-    const isFinal = msg.is_final ?? msg.isFinal;
+    const isFinal = msg.isFinal;
+
     // Handle audio chunks
     if (msg.audio) {
       const socket = contextToSocketMap.get(ctxId);
@@ -121,34 +122,24 @@ export function initElevenLabs(voiceId) {
         const currentIndex = global.chunkIndexMap.get(ctxId) || 0;
         global.chunkIndexMap.set(ctxId, currentIndex + 1);
 
-        console.log(
-          `[SEND_CHUNK] ctx=${ctxId} idx=${currentIndex} size=${chunkSize} ts=${Date.now()}`
-        );
-
         const audioObj = {
           contextId: ctxId,
           index: currentIndex,
           audio: cleanAudioBase64,
-          isFinal: isFinal,
+          isFinal: isFinal || false, // Explicitly set to false if undefined
         };
 
+        markAiSpeaking(socket.id);
         socket.emit("ai-audio-chunk", audioObj);
       } else {
         console.warn(
-          `⚠️ [AUDIO CHUNK] No socket found for contextId: ${ctxId} | activeContexts: ${Array.from(
-            activeContexts
-          ).join(", ")}`
-        );
-        console.warn(
-          `⚠️ [AUDIO CHUNK] Available mappings: ${Array.from(
-            contextToSocketMap.keys()
-          ).join(", ")}`
+          `⚠️ [AUDIO CHUNK] No socket found for contextId: ${ctxId}`
         );
       }
     }
 
     // Handle final chunk
-    if (isFinal) {
+    if (isFinal === true) {
       const hadContext = activeContexts.has(ctxId);
       const hadMapping = contextToSocketMap.has(ctxId);
 
@@ -159,6 +150,8 @@ export function initElevenLabs(voiceId) {
       // Notify frontend that audio is complete
       if (socket) {
         socket.emit("ai-audio-complete", { contextId: ctxId });
+      } else {
+        logger.warn(`⚠️ [ELEVEN FINAL] No socket found for final message`);
       }
     }
 
@@ -251,9 +244,6 @@ export function startContext(voiceConfig, socket) {
     );
     return null;
   }
-
-  console.log(voiceConfig);
-
   const contextId = uuidv4();
   const initMsg = {
     text: " ",
@@ -289,7 +279,6 @@ export function startContext(voiceConfig, socket) {
   };
 
   try {
-    console.log(initMsg);
     ws.send(JSON.stringify(initMsg));
 
     // Register context after successful send

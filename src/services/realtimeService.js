@@ -57,7 +57,6 @@ export async function connectToRealtimeAPI(summary = [], token) {
 
       // 🧠 Personality instructions (DYNAMIC, DB-driven)
       const personalityInstructions = buildOpenAIPrompt(personalityConfig);
-
       // 🧠 Final merged instructions
       const fullInstructions = `
               ${baseInstructions}
@@ -69,7 +68,6 @@ export async function connectToRealtimeAPI(summary = [], token) {
               ${memoryText}
               </MEMORY>
                 `.trim();
-
       // 🔌 Connect WebSocket
       const ws = new WebSocket(OPENAI_REALTIME_API, {
         headers: {
