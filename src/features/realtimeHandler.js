@@ -64,10 +64,6 @@ export async function handleRealtimeAI(socket, token) {
   });
 
   socket.on("trigger-reengagement", () => {
-    if (!gptWs || gptWs.readyState !== WebSocket.OPEN) {
-      return;
-    }
-
     markReengagementTriggered(socket.id);
 
     gptWs.send(
