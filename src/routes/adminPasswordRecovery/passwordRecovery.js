@@ -2,7 +2,7 @@ import express from "express";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
-import { EMAIL_PASS, EMAIL_USER, FRONTEND_URL } from "../../config/env.js";
+import { EMAIL_PASS, FRONTEND_URL, USER_NAME } from "../../config/env.js";
 import AdminAccountPassword from "../../models/AdminAccountPassword.js";
 
 export const adminPasswordRouter = express.Router();
@@ -21,7 +21,7 @@ adminPasswordRouter.post("/admin/forgot-password", async (req, res) => {
     });
 
     if (!admin) {
-      return res.json({ success: true }); // don't reveal existence
+      return res.json({ success: false, message: "Email not correct" }); // don't reveal existence
     }
 
     const resetToken = crypto.randomBytes(32).toString("hex");
@@ -39,15 +39,17 @@ adminPasswordRouter.post("/admin/forgot-password", async (req, res) => {
 
     // Setup Nodemailer transporter (Gmail example)
     const transporter = nodemailer.createTransport({
-      service: "gmail",
+      host: "smtp.strato.de",
+      port: 587,
+      secure: false,
       auth: {
-        user: EMAIL_USER, // your email
-        pass: EMAIL_PASS, // app password
+        user: USER_NAME,
+        pass: EMAIL_PASS,
       },
     });
 
     const mailOptions = {
-      from: `"PlauderFreund Admin" <${EMAIL_USER}>`,
+      from: `"PlauderFreund" <${USER_NAME}>`,
       to: email,
       subject: "Reset your admin password",
       html: `<p>Click the link below to reset your password:</p>
@@ -59,7 +61,6 @@ adminPasswordRouter.post("/admin/forgot-password", async (req, res) => {
 
     res.json({ success: true, message: "Reset link sent to email" });
   } catch (err) {
-    console.error("Forgot password error:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });

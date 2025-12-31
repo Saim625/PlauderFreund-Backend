@@ -34,13 +34,16 @@ memoryRouter.post("/update", async (req, res) => {
 });
 
 // ✅ Summarize (extract insights from GPT and update memory)
-// ✅ Summarize (extract insights from GPT and update memory)
 memoryRouter.post("/summarize", async (req, res) => {
+  console.log("Summary Api triggered");
+
   const { token, text } = req.body;
   if (!token || !text)
     return res
       .status(400)
       .json({ success: false, message: "Token and text required" });
+
+  console.log("Text", text);
 
   const prompt = `
 You are a memory extraction system designed to identify useful long-term information from a chat session. 
@@ -81,11 +84,13 @@ Conversation History:
 """${text}"""`;
 
   const gptResponse = await getGPTResponse([{ role: "user", content: prompt }]);
+  console.log("gptResponse", gptResponse);
   let cleaned = gptResponse
     .replace(/```json/g, "")
     .replace(/```/g, "")
     .trim();
 
+  console.log("Clean Summary", cleaned);
   let newInsights = [];
   try {
     newInsights = JSON.parse(cleaned);
