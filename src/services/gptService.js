@@ -14,8 +14,10 @@ export async function getGPTResponse(messages) {
     });
 
     // Extract text output
-    return completion.choices[0].message.content.trim();
+    const content = completion.choices[0]?.message?.content;
+    return content ? content.trim() : null;
   } catch (err) {
     console.log(err.message);
+    return null;
   }
 }

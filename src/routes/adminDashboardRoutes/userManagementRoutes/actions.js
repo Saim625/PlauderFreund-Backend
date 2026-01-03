@@ -5,6 +5,7 @@ import { verifyAdminToken } from "../../../middleware/verifyAdminToken.js";
 import { v4 as uuidv4 } from "uuid";
 import MemorySummary from "../../../models/MemorySummary.js";
 import PersonalityConfig from "../../../models/PersonalityConfig.js";
+import Conversation from "../../../models/Conversation.js";
 
 export const actionRouter = express.Router();
 
@@ -84,6 +85,11 @@ actionRouter.delete(
       }
 
       await UserAccessToken.findByIdAndDelete(tokenId);
+      await Promise.all([
+        MemorySummary.deleteOne({ token: userRecord.token }),
+        PersonalityConfig.deleteOne({ userToken: userRecord.token }),
+        Conversation.deleteOne({ token: userRecord.token }),
+      ]);
 
       return res.json({
         success: true,

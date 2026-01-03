@@ -18,6 +18,8 @@ import {
 } from "../services/reengagementEngine.js";
 import MemorySummary from "../models/MemorySummary.js";
 import { getVoiceConfigForToken } from "../utils/getVoiceConfigForToken.js";
+import { ingestConversationMessage } from "../utils/ingestConversationMessage.js";
+import { flushConversationToMemory } from "../services/flushConversationToMemory.js";
 
 export async function handleRealtimeAI(socket, token) {
   let gptWs;
@@ -78,7 +80,7 @@ export async function handleRealtimeAI(socket, token) {
     );
   });
 
-  gptWs.on("message", (msg) => {
+  gptWs.on("message", async (msg) => {
     const event = JSON.parse(msg.toString());
 
     if (event.type === "input_audio_buffer.speech_started") {
@@ -117,7 +119,6 @@ export async function handleRealtimeAI(socket, token) {
       event.type === "conversation.item.input_audio_transcription.completed"
     ) {
       const userTranscript = event.transcript;
-
       markUserAudio(socket.id);
 
       const s = sessions.get(socket.id);
@@ -125,9 +126,10 @@ export async function handleRealtimeAI(socket, token) {
         s.cooldownUntil = 0;
       }
 
-      socket.emit("user-transcript", {
+      await ingestConversationMessage({
+        token: token,
+        role: "user",
         text: userTranscript,
-        timestamp: new Date().toISOString(),
       });
     }
 
@@ -204,9 +206,10 @@ export async function handleRealtimeAI(socket, token) {
     if (event.type === "response.output_text.done") {
       const fullAiResponse = event.text;
 
-      socket.emit("ai-transcript", {
+      await ingestConversationMessage({
+        token,
+        role: "ai",
         text: fullAiResponse,
-        timestamp: new Date().toISOString(),
       });
 
       if (currentContextId && !isContextClosing) {
@@ -277,7 +280,14 @@ export async function handleRealtimeAI(socket, token) {
     markAiPlaybackDone(socket.id);
   });
 
-  socket.on("disconnect", () => {
+  socket.on("disconnect", async () => {
+    try {
+      await flushConversationToMemory(token);
+    } catch (err) {
+      console.error("❌ Memory flush failed:", err);
+    }
+    console.log("Memory Function run");
+
     destroySession(socket.id);
 
     // Clean up timer
