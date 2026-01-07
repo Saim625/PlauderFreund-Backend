@@ -158,7 +158,8 @@ export function initElevenLabs(voiceId) {
     // Handle errors
     if (msg.error) {
       logger.error(
-        `❌ [ELEVEN ERROR] Error in message for contextId: ${ctxId}`
+        `❌ [ELEVEN ERROR] Error in message for contextId: ${ctxId}`,
+        msg.error
       );
       logger.error(`   Error details:`, JSON.stringify(msg.error, null, 2));
 
