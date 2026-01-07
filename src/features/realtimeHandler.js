@@ -33,6 +33,7 @@ export async function handleRealtimeAI(socket, token) {
   initSession(socket.id);
 
   const voiceConfig = await getVoiceConfigForToken(token);
+
   try {
     initElevenLabs(voiceConfig.voiceId);
 
