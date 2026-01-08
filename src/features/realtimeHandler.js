@@ -34,6 +34,13 @@ export async function handleRealtimeAI(socket, token) {
 
   const voiceConfig = await getVoiceConfigForToken(token);
 
+  if (!voiceConfig || !voiceConfig.voiceId) {
+    logger.error(
+      `❌ [SESSION] Cannot init ElevenLabs: voiceId is missing for token.`
+    );
+    return; // Exit here so it doesn't crash the server
+  }
+
   try {
     initElevenLabs(voiceConfig.voiceId);
 
