@@ -156,20 +156,44 @@ export function initElevenLabs(voiceId) {
     }
 
     // Handle errors
-    if (msg.error) {
-      logger.error(
-        `❌ [ELEVEN ERROR] Error in message for contextId: ${ctxId}`,
-        msg.error
-      );
-      logger.error(`   Error details:`, JSON.stringify(msg.error, null, 2));
+    // if (msg.error) {
+    //   logger.error(
+    //     `❌ [ELEVEN ERROR] Error in message for contextId: ${ctxId}`,
+    //     msg.error
+    //   );
+    //   logger.error(`   Error details:`, JSON.stringify(msg.error, null, 2));
 
-      const socket = contextToSocketMap.get(ctxId);
-      if (socket) {
-        socket.emit("ai-error", {
-          message: "TTS error occurred",
-          error: msg.error,
-          contextId: ctxId,
-        });
+    //   const socket = contextToSocketMap.get(ctxId);
+    //   if (socket) {
+    //     socket.emit("ai-error", {
+    //       message: "TTS error occurred",
+    //       error: msg.error,
+    //       contextId: ctxId,
+    //     });
+    //   }
+    // }
+
+    // Handle errors
+    if (msg.error) {
+      // Use msg.error.message or the whole object if it's just a string
+      const errorDetail =
+        typeof msg.error === "object"
+          ? msg.error.message ||
+            JSON.stringify(msg.error, Object.getOwnPropertyNames(msg.error))
+          : msg.error;
+
+      logger.error(`❌ [ELEVEN ERROR] for contextId: ${ctxId || "N/A"}`);
+      logger.error(`   Details: ${errorDetail}`);
+
+      if (ctxId) {
+        const socket = contextToSocketMap.get(ctxId);
+        if (socket) {
+          socket.emit("ai-error", {
+            message: "TTS error occurred",
+            error: errorDetail,
+            contextId: ctxId,
+          });
+        }
       }
     }
   });
