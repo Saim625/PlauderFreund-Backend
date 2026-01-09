@@ -55,6 +55,7 @@ export function ensureElevenLabsReady(timeout = READY_TIMEOUT) {
  * Initialize (or reuse) the multi-context WebSocket connection
  */
 export function initElevenLabs(voiceId) {
+  console.log("Voice Id Check", voiceId);
   // Reuse existing healthy connection
   if (ws && ws.readyState === WebSocket.OPEN && isReady) {
     return;
@@ -150,28 +151,11 @@ export function initElevenLabs(voiceId) {
       // Notify frontend that audio is complete
       if (socket) {
         socket.emit("ai-audio-complete", { contextId: ctxId });
+        console.log("FE Notified", ctxId);
       } else {
         logger.warn(`⚠️ [ELEVEN FINAL] No socket found for final message`);
       }
     }
-
-    // Handle errors
-    // if (msg.error) {
-    //   logger.error(
-    //     `❌ [ELEVEN ERROR] Error in message for contextId: ${ctxId}`,
-    //     msg.error
-    //   );
-    //   logger.error(`   Error details:`, JSON.stringify(msg.error, null, 2));
-
-    //   const socket = contextToSocketMap.get(ctxId);
-    //   if (socket) {
-    //     socket.emit("ai-error", {
-    //       message: "TTS error occurred",
-    //       error: msg.error,
-    //       contextId: ctxId,
-    //     });
-    //   }
-    // }
 
     // Handle errors
     if (msg.error) {
@@ -243,6 +227,7 @@ export function initElevenLabs(voiceId) {
         clearTimeout(reconnectTimeout);
         reconnectTimeout = setTimeout(() => {
           initElevenLabs();
+          console.log("Auto-Reconnect Attempted");
         }, delay);
       } else {
         logger.error(

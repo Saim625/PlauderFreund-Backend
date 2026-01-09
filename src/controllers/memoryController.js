@@ -4,32 +4,42 @@ import MemorySummary from "../models/MemorySummary.js";
  * Reusable function to update or create memory summary
  */
 export async function updateMemorySummary(token, newInsights) {
+  console.log("Indights: ", newInsights);
   if (!token) throw new Error("Token required");
 
   let memory = await MemorySummary.findOne({ token });
 
   if (!memory) {
     // Convert any arrays/objects to strings
-    const cleanedInsights = newInsights.map((insight) => ({
-      ...insight,
-      value:
-        Array.isArray(insight.value) || typeof insight.value === "object"
-          ? JSON.stringify(insight.value)
-          : insight.value,
-    }));
-
+    const cleanedInsights = newInsights.map((insight) => {
+      const { _id, ...safeInsight } = insight; // 🔥 remove GPT id
+      return {
+        ...safeInsight,
+        value:
+          Array.isArray(safeInsight.value) ||
+          typeof safeInsight.value === "object"
+            ? JSON.stringify(safeInsight.value)
+            : safeInsight.value,
+      };
+    });
     memory = new MemorySummary({ token, summary: cleanedInsights });
   } else {
     newInsights.forEach((insight) => {
-      // Convert arrays/objects before saving
-      const safeValue =
-        Array.isArray(insight.value) || typeof insight.value === "object"
-          ? JSON.stringify(insight.value)
-          : insight.value;
+      const { _id, ...safeInsight } = insight; // 🔥 delete GPT id
 
-      const existing = memory.summary.find((s) => s.key === insight.key);
-      if (existing) existing.value = safeValue;
-      else memory.summary.push({ ...insight, value: safeValue });
+      const safeValue =
+        Array.isArray(safeInsight.value) ||
+        typeof safeInsight.value === "object"
+          ? JSON.stringify(safeInsight.value)
+          : safeInsight.value;
+
+      const existing = memory.summary.find((s) => s.key === safeInsight.key);
+      if (existing) {
+        existing.value = safeValue;
+        existing.lastUpdated = new Date();
+      } else {
+        memory.summary.push({ ...safeInsight, value: safeValue });
+      }
     });
   }
 

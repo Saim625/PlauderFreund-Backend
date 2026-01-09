@@ -43,6 +43,7 @@ export async function handleRealtimeAI(socket, token) {
 
   try {
     initElevenLabs(voiceConfig.voiceId);
+    console.log("Eleven initialised");
 
     // 🔥 STEP 2: Wait for ElevenLabs to be ready (CRITICAL FIX)
     await ensureElevenLabsReady();
@@ -266,6 +267,8 @@ export async function handleRealtimeAI(socket, token) {
   socket.on("ai-audio-done", ({ contextId }) => {
     const now = Date.now();
     if (contextId !== currentContextId) {
+      console.log("ContextID: ", contextId),
+        console.log("Current Context ID", currentContextId);
       logger.warn(
         `⚠️ [AUDIO COMPLETE] Context mismatch. Received=${contextId}, Active=${currentContextId}`
       );
