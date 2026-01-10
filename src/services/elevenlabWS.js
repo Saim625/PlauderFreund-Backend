@@ -6,7 +6,7 @@ import {
 } from "../config/env.js";
 import { v4 as uuidv4 } from "uuid";
 import logger from "../utils/logger.js";
-import { markAiPlaybackDone, markAiSpeaking } from "./reengagementEngine.js";
+import { markAiSpeaking } from "./reengagementEngine.js";
 
 let ws = null;
 let isReady = false;
@@ -216,7 +216,10 @@ export function initElevenLabs(voiceId) {
     contextToSocketMap.clear();
 
     // Auto-reconnect with backoff (unless manual close)
-    if (!reasonStr.includes("manual")) {
+    if (
+      !reasonStr.includes("manual") &&
+      !reasonStr.includes("voice_id_does_not_exist")
+    ) {
       if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
         reconnectAttempts++;
         const delay = Math.min(
@@ -226,7 +229,7 @@ export function initElevenLabs(voiceId) {
 
         clearTimeout(reconnectTimeout);
         reconnectTimeout = setTimeout(() => {
-          initElevenLabs();
+          initElevenLabs(voiceId);
           console.log("Auto-Reconnect Attempted");
         }, delay);
       } else {
