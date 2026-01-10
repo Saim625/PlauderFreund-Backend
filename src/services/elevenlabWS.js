@@ -229,7 +229,7 @@ export function initElevenLabs(voiceId) {
 
         clearTimeout(reconnectTimeout);
         reconnectTimeout = setTimeout(() => {
-          initElevenLabs(voiceId);
+          initElevenLabs();
           console.log("Auto-Reconnect Attempted");
         }, delay);
       } else {
