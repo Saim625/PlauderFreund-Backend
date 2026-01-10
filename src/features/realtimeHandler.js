@@ -17,7 +17,7 @@ import {
   sessions,
 } from "../services/reengagementEngine.js";
 import MemorySummary from "../models/MemorySummary.js";
-import { getVoiceConfigForToken } from "../utils/getVoiceConfigForToken.js";
+// import { getVoiceConfigForToken } from "../utils/getVoiceConfigForToken.js";
 import { ingestConversationMessage } from "../utils/ingestConversationMessage.js";
 import { flushConversationToMemory } from "../services/flushConversationToMemory.js";
 
@@ -32,17 +32,10 @@ export async function handleRealtimeAI(socket, token) {
 
   initSession(socket.id);
 
-  const voiceConfig = await getVoiceConfigForToken(token);
-
-  if (!voiceConfig || !voiceConfig.voiceId) {
-    logger.error(
-      `❌ [SESSION] Cannot init ElevenLabs: voiceId is missing for token.`
-    );
-    return; // Exit here so it doesn't crash the server
-  }
+  // const voiceConfig = await getVoiceConfigForToken(token);
 
   try {
-    initElevenLabs(voiceConfig.voiceId);
+    initElevenLabs();
     console.log("Eleven initialised");
 
     // 🔥 STEP 2: Wait for ElevenLabs to be ready (CRITICAL FIX)

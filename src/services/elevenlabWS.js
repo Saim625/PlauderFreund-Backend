@@ -54,8 +54,7 @@ export function ensureElevenLabsReady(timeout = READY_TIMEOUT) {
 /**
  * Initialize (or reuse) the multi-context WebSocket connection
  */
-export function initElevenLabs(voiceId) {
-  console.log("Voice Id Check", voiceId);
+export function initElevenLabs() {
   // Reuse existing healthy connection
   if (ws && ws.readyState === WebSocket.OPEN && isReady) {
     return;
@@ -202,6 +201,7 @@ export function initElevenLabs(voiceId) {
 
   ws.on("close", (code, reason) => {
     const reasonStr = reason.toString();
+    console.log("Reason for Closing Eleven labs: ", reasonStr);
 
     isReady = false;
     isConnecting = false;
