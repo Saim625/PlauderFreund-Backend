@@ -3,6 +3,7 @@ import {
   ELEVENLABS_API_KEY,
   ELEVENLABS_BASE_URL,
   ELEVENLABS_MODEL,
+  ELEVENLABS_VOICE_ID,
 } from "../config/env.js";
 import { v4 as uuidv4 } from "uuid";
 import logger from "../utils/logger.js";
@@ -84,7 +85,7 @@ export function initElevenLabs() {
     isReady = false;
   }
 
-  const uri = `${ELEVENLABS_BASE_URL}/text-to-speech/${voiceId}/multi-stream-input?model_id=${ELEVENLABS_MODEL}&output_format=pcm_24000`;
+  const uri = `${ELEVENLABS_BASE_URL}/text-to-speech/${ELEVENLABS_VOICE_ID}/multi-stream-input?model_id=${ELEVENLABS_MODEL}&output_format=pcm_24000`;
   isConnecting = true;
 
   ws = new WebSocket(uri, {
