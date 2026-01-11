@@ -1,74 +1,77 @@
 import { connectToRealtimeAPI } from "../services/realtimeService.js";
 import logger from "../utils/logger.js";
 import {
-  initElevenLabs,
-  ensureElevenLabsReady,
-  startContext,
-  sendTextToElevenLabs,
-  closeContext,
-  getElevenLabsStatus,
+  initElevenLabsForUser,
+  getConnectionForUser,
+  cleanupUserConnection,
 } from "../services/elevenlabWS.js";
 import {
   initSession,
   destroySession,
   markUserAudio,
+  markUserSpeaking,
   markAiPlaybackDone,
   markReengagementTriggered,
   sessions,
 } from "../services/reengagementEngine.js";
 import MemorySummary from "../models/MemorySummary.js";
-// import { getVoiceConfigForToken } from "../utils/getVoiceConfigForToken.js";
 import { ingestConversationMessage } from "../utils/ingestConversationMessage.js";
 import { flushConversationToMemory } from "../services/flushConversationToMemory.js";
+import { getVoiceConfigForToken } from "../utils/getVoiceConfigForToken.js";
 
 export async function handleRealtimeAI(socket, token) {
   let gptWs;
-  let currentContextId = null;
-  let isContextClosing = false;
+  let elevenConnection = null;
   let currentResponseId = null;
-  let contextCleanupTimer = null;
   let textChunkCount = 0;
-  let audioChunkCount = 0;
 
-  initSession(socket.id);
+  const userId = socket.id; // Use socket.id as unique user identifier
 
-  // const voiceConfig = await getVoiceConfigForToken(token);
+  initSession(userId);
+
+  const voiceConfig = await getVoiceConfigForToken(token);
 
   try {
-    initElevenLabs();
-    console.log("Eleven initialised");
+    // 🔥 STEP 1: Initialize ElevenLabs for THIS user
+    // TODO: Get voiceId from user preferences/token
 
-    // 🔥 STEP 2: Wait for ElevenLabs to be ready (CRITICAL FIX)
-    await ensureElevenLabsReady();
-    // 🔥 STEP 3: Load memory
+    const voiceId = voiceConfig.voiceId; // Replace with dynamic voiceId from user config
+
+    elevenConnection = await initElevenLabsForUser(userId, voiceId, socket);
+    logger.info(`✅ [${userId}] ElevenLabs initialized`);
+
+    // 🔥 STEP 2: Load memory
     const memory = await MemorySummary.findOne({ token });
     const summary = memory?.summary || [];
 
-    // 🔥 STEP 4: Connect to GPT Realtime API
+    // 🔥 STEP 3: Connect to GPT Realtime API
     gptWs = await connectToRealtimeAPI(summary, token);
+    logger.info(`✅ [${userId}] GPT Realtime connected`);
   } catch (err) {
-    logger.error(
-      `❌ [INIT] Initialization failed for Socket ${socket.id}:`,
-      err
-    );
+    logger.error(`❌ [${userId}] Initialization failed:`, err);
     socket.emit("ai-error", {
       message: "AI connection failed: " + err.message,
     });
+
+    // Cleanup on error
+    if (elevenConnection) {
+      cleanupUserConnection(userId);
+    }
     return;
   }
 
   socket.on("conversation-started", () => {
-    const s = sessions.get(socket.id);
+    const s = sessions.get(userId);
     if (!s) return;
 
     s.conversationActive = true;
     s.lastUserAudioAt = Date.now();
     s.lastAiPlaybackFinishedAt = Date.now();
-    s.cooldownUntil = Date.now() + 5000; // grace period
+    s.cooldownUntil = Date.now() + 5000;
   });
 
   socket.on("trigger-reengagement", () => {
-    markReengagementTriggered(socket.id);
+    markReengagementTriggered(userId);
 
     gptWs.send(
       JSON.stringify({
@@ -85,45 +88,48 @@ export async function handleRealtimeAI(socket, token) {
   gptWs.on("message", async (msg) => {
     const event = JSON.parse(msg.toString());
 
+    // 🎤 User started speaking - interrupt AI
     if (event.type === "input_audio_buffer.speech_started") {
-      // 1️⃣ Cancel cleanup timer
-      if (contextCleanupTimer) {
-        clearTimeout(contextCleanupTimer);
-        contextCleanupTimer = null;
-      }
+      const connection = getConnectionForUser(userId);
 
-      // 2️⃣ Check if there's an active response to interrupt
-      if (currentContextId && !isContextClosing) {
+      // 🔥 CRITICAL: Mark user activity IMMEDIATELY to prevent re-engagement
+      markUserSpeaking(userId, true);
+      logger.info(`🎤 [${userId}] User started speaking - activity updated`);
+
+      if (connection && connection.contextId) {
+        logger.info(`🛑 [${userId}] User interrupted - canceling AI response`);
+
+        // Notify frontend
         socket.emit("ai-interrupt");
 
-        // 4️⃣ Cancel GPT response
+        // Cancel GPT response
         if (currentResponseId) {
           gptWs.send(JSON.stringify({ type: "response.cancel" }));
         }
 
-        const closeResult = closeContext(currentContextId);
-        logger.info(`🧹 [ELEVEN] Context close result: ${closeResult}`);
+        // Close ElevenLabs context
+        connection.closeContext();
 
-        // 6️⃣ Reset state
-        currentContextId = null;
+        // Reset state
         currentResponseId = null;
-        isContextClosing = false;
         textChunkCount = 0;
-        audioChunkCount = 0;
-      } else {
-        logger.info(
-          `ℹ️ [INTERRUPT] No active context to cancel | contextId=${currentContextId}, closing=${isContextClosing}`
-        );
       }
     }
 
+    // 🛑 User stopped speaking
+    if (event.type === "input_audio_buffer.speech_stopped") {
+      markUserSpeaking(userId, false);
+      logger.info(`🛑 [${userId}] User stopped speaking`);
+    }
+
+    // 📝 User speech transcription completed
     if (
       event.type === "conversation.item.input_audio_transcription.completed"
     ) {
       const userTranscript = event.transcript;
-      markUserAudio(socket.id);
+      markUserAudio(userId);
 
-      const s = sessions.get(socket.id);
+      const s = sessions.get(userId);
       if (s) {
         s.cooldownUntil = 0;
       }
@@ -135,76 +141,63 @@ export async function handleRealtimeAI(socket, token) {
       });
     }
 
+    // 🤖 AI response started
     if (event.type === "response.created") {
       currentResponseId = event.response?.id;
-
       textChunkCount = 0;
-      audioChunkCount = 0;
 
-      // 1️⃣ Cancel any running cleanup timer
-      if (contextCleanupTimer) {
-        clearTimeout(contextCleanupTimer);
-        contextCleanupTimer = null;
-      }
+      const connection = getConnectionForUser(userId);
 
-      // 2️⃣ Close old context if exists (safety check)
-      if (currentContextId && !isContextClosing) {
-        closeContext(currentContextId);
-      }
-
-      // 3️⃣ Check ElevenLabs status before starting new context
-      const elevenStatus = getElevenLabsStatus();
-
-      if (!elevenStatus.ready) {
-        logger.error(
-          `❌ [RESPONSE START] ElevenLabs not ready! Cannot start context.`
-        );
-        socket.emit("ai-error", { message: "TTS service not ready" });
+      if (!connection) {
+        logger.error(`❌ [${userId}] No ElevenLabs connection found`);
+        socket.emit("ai-error", { message: "Audio service disconnected" });
         return;
       }
 
-      // 4️⃣ Start new ElevenLabs context
-      currentContextId = startContext(voiceConfig, socket);
+      // Close old context if exists
+      if (connection.contextId) {
+        connection.closeContext();
+      }
 
-      if (!currentContextId) {
-        socket.emit("ai-error", { message: "TTS context creation failed" });
-      } else {
-        isContextClosing = false;
+      // Start new context
+      const contextId = connection.startContext(voiceConfig);
+
+      if (!contextId) {
+        logger.error(`❌ [${userId}] Failed to start audio context`);
+        socket.emit("ai-error", { message: "Failed to start audio stream" });
       }
     }
 
+    // 📤 AI text chunk received
     if (event.type === "response.output_text.delta") {
       const textChunk = event.delta;
       textChunkCount++;
 
-      if (!currentContextId) {
+      const connection = getConnectionForUser(userId);
+
+      if (!connection) {
         logger.error(
-          `❌ [TEXT CHUNK #${textChunkCount}] No contextId! Cannot send to ElevenLabs`
+          `❌ [${userId}] No connection for text chunk #${textChunkCount}`
         );
         return;
       }
 
-      if (isContextClosing) {
-        logger.error(
-          `⚠️ [TEXT CHUNK #${textChunkCount}] Context is closing, skipping chunk`
-        );
+      if (!connection.contextId) {
+        logger.error(`❌Cannot send text - no active context`);
+
         return;
       }
 
-      // Double-check ElevenLabs status
-      const elevenStatus = getElevenLabsStatus();
-      if (!elevenStatus.ready) {
+      const sendResult = connection.sendText(textChunk);
+
+      if (!sendResult) {
         logger.error(
-          `❌ [TEXT CHUNK #${textChunkCount}] ElevenLabs disconnected mid-stream! | wsState=${elevenStatus.wsState}`
+          `❌ [${userId}] Failed to send text chunk #${textChunkCount}`
         );
-        socket.emit("ai-error", {
-          message: "TTS connection lost during stream",
-        });
-        return;
       }
-      const sendResult = sendTextToElevenLabs(textChunk, currentContextId);
     }
 
+    // ✅ AI text generation complete
     if (event.type === "response.output_text.done") {
       const fullAiResponse = event.text;
 
@@ -214,34 +207,31 @@ export async function handleRealtimeAI(socket, token) {
         text: fullAiResponse,
       });
 
-      if (currentContextId && !isContextClosing) {
-        const flushResult = sendTextToElevenLabs("", currentContextId, {
-          flush: true,
-        });
-      } else {
-        logger.warn(
-          `⚠️ [FLUSH] Cannot flush | contextId=${currentContextId}, closing=${isContextClosing}`
-        );
+      const connection = getConnectionForUser(userId);
+
+      if (connection && connection.contextId) {
+        // Flush remaining audio
+        connection.sendText("", { flush: true });
       }
     }
 
+    // ✅ AI response done
     if (event.type === "response.done") {
       socket.emit("ai-response-done", { response: event.response });
-
       currentResponseId = null;
     }
 
+    // ❌ AI response cancelled
     if (event.type === "response.cancelled") {
       currentResponseId = null;
       textChunkCount = 0;
-      audioChunkCount = 0;
     }
   });
 
+  // 🎤 User audio chunk from frontend
   socket.on("audio-chunk", (chunkArrayBuffer) => {
     try {
       const base64Audio = Buffer.from(chunkArrayBuffer).toString("base64");
-      const audioSize = base64Audio.length;
 
       gptWs.send(
         JSON.stringify({
@@ -250,66 +240,68 @@ export async function handleRealtimeAI(socket, token) {
         })
       );
     } catch (err) {
-      logger.error(
-        `❌ [AUDIO FORWARD] Error forwarding audio to GPT | Socket: ${socket.id}:`,
-        err
-      );
+      logger.error(`❌ [${userId}] Error forwarding audio to GPT:`, err);
     }
   });
 
+  // 🔊 Frontend finished playing audio
   socket.on("ai-audio-done", ({ contextId }) => {
-    const now = Date.now();
-    if (contextId !== currentContextId) {
-      console.log("ContextID: ", contextId),
-        console.log("Current Context ID", currentContextId);
-      logger.warn(
-        `⚠️ [AUDIO COMPLETE] Context mismatch. Received=${contextId}, Active=${currentContextId}`
-      );
+    logger.info(
+      `🔊 [${userId}] Frontend confirmed playback done at ${new Date().toISOString()}`
+    );
+
+    const connection = getConnectionForUser(userId);
+
+    if (!connection) {
+      logger.warn(`⚠️ [${userId}] No connection found for audio-done event`);
       return;
     }
 
-    // 🔐 Close GPT context safely
-    try {
-      closeContext(contextId);
-    } catch (err) {
-      logger.error("❌ Failed to close GPT context", err);
+    if (contextId !== connection.contextId) {
+      logger.warn(
+        `⚠️ [${userId}] Context mismatch. Received=${contextId}, Active=${connection.contextId}`
+      );
     }
 
-    // 🧹 Reset realtime state
-    currentContextId = null;
-    isContextClosing = false;
-    textChunkCount = 0;
-    audioChunkCount = 0;
+    // Close context only if it matches
+    if (contextId === connection.contextId) {
+      connection.closeContext();
+    }
 
-    markAiPlaybackDone(socket.id);
+    // Reset state
+    textChunkCount = 0;
+
+    markAiPlaybackDone(userId);
+    logger.info(
+      `✅ [${userId}] Playback marked as done. Re-engagement timer starts NOW.`
+    );
   });
 
+  // 🔌 User disconnected
   socket.on("disconnect", async () => {
+    logger.info(`🔴 [${userId}] User disconnecting...`);
+
     try {
+      // Flush conversation to memory
       await flushConversationToMemory(token);
+      logger.info(`✅ [${userId}] Memory flushed`);
     } catch (err) {
-      console.error("❌ Memory flush failed:", err);
-    }
-    console.log("Memory Function run");
-
-    destroySession(socket.id);
-
-    // Clean up timer
-    if (contextCleanupTimer) {
-      clearTimeout(contextCleanupTimer);
+      logger.error(`❌ [${userId}] Memory flush failed:`, err);
     }
 
-    // Close current context if exists
-    if (currentContextId) {
-      const closeResult = closeContext(currentContextId);
-    }
+    // Destroy session
+    destroySession(userId);
+
+    // 🔥 FIX: Clean up THIS user's ElevenLabs connection
+    cleanupUserConnection(userId);
+    logger.info(`✅ [${userId}] ElevenLabs connection cleaned up`);
 
     // Close GPT WebSocket
     if (gptWs) {
       gptWs.close();
+      logger.info(`✅ [${userId}] GPT connection closed`);
     }
 
-    // Log final status
-    const elevenStatus = getElevenLabsStatus();
+    logger.info(`✅ [${userId}] Full cleanup complete`);
   });
 }

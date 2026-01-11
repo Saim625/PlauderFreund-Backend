@@ -17,6 +17,7 @@ import { summaryEditorRouter } from "./routes/adminDashboardRoutes/userManagemen
 import { personalityActionRouter } from "./routes/adminDashboardRoutes/personalityConfigRoutes/personalityActions.js";
 import { adminPasswordRouter } from "./routes/adminPasswordRecovery/passwordRecovery.js";
 import { startReengagementLoop } from "./services/reengagementEngine.js";
+import { cleanupAllConnections } from "./services/elevenlabWS.js";
 
 const app = express();
 
@@ -85,3 +86,16 @@ DB_CONNECTION()
   .catch((err) => {
     console.error("Database connection failed:", err);
   });
+
+// Graceful shutdown
+process.on("SIGTERM", async () => {
+  logger.info("🛑 SIGTERM received, cleaning up...");
+  cleanupAllConnections();
+  process.exit(0);
+});
+
+process.on("SIGINT", async () => {
+  logger.info("🛑 SIGINT received, cleaning up...");
+  cleanupAllConnections();
+  process.exit(0);
+});
