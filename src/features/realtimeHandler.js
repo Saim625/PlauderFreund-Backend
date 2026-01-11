@@ -24,6 +24,7 @@ export async function handleRealtimeAI(socket, token) {
   let elevenConnection = null;
   let currentResponseId = null;
   let textChunkCount = 0;
+  let lastProcessedContextId = null;
 
   const userId = socket.id; // Use socket.id as unique user identifier
 
@@ -154,15 +155,19 @@ export async function handleRealtimeAI(socket, token) {
         return;
       }
 
-      // Close old context if exists
-      if (connection.contextId) {
+      // 🔥 FIX: Only close old context if it's different from current
+      const oldContextId = connection.contextId;
+
+      if (oldContextId) {
+        logger.info(
+          `🔄 [${userId}] Closing old context ${oldContextId} before starting new one`
+        );
         connection.closeContext();
       }
-
       // Start new context
-      const contextId = connection.startContext(voiceConfig);
+      const newContextId = connection.startContext(voiceConfig);
 
-      if (!contextId) {
+      if (!newContextId) {
         logger.error(`❌ [${userId}] Failed to start audio context`);
         socket.emit("ai-error", { message: "Failed to start audio stream" });
       }
@@ -249,6 +254,16 @@ export async function handleRealtimeAI(socket, token) {
     logger.info(
       `🔊 [${userId}] Frontend confirmed playback done at ${new Date().toISOString()}`
     );
+
+    // 🔥 FIX: Prevent duplicate processing of same contextId
+    if (lastProcessedContextId === contextId) {
+      logger.warn(
+        `⚠️ [${userId}] Duplicate ai-audio-done for context ${contextId}, ignoring`
+      );
+      return;
+    }
+
+    lastProcessedContextId = contextId;
 
     const connection = getConnectionForUser(userId);
 

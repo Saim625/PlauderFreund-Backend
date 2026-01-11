@@ -157,8 +157,22 @@ class ElevenLabsConnection {
 
     // Handle final chunk
     if (msg.isFinal === true) {
-      this.socket.emit("ai-audio-complete", { contextId: this.contextId });
-      logger.info(`✅ [${this.userId}] Audio stream complete`);
+      // 🔥 FIX: Capture contextId BEFORE it might be cleared
+      const finalContextId = this.contextId;
+
+      if (finalContextId) {
+        this.socket.emit("ai-audio-complete", { contextId: finalContextId });
+        logger.info(
+          `✅ [${this.userId}] Audio stream complete for context: ${finalContextId}`
+        );
+      } else {
+        logger.warn(
+          `⚠️ [${this.userId}] Received isFinal but contextId is null`
+        );
+      }
+
+      // ⚠️ DON'T close context here - let the handler do it when GPT is done
+      // Context will be closed by: response.output_text.done OR ai-audio-done event
     }
 
     // Handle errors
