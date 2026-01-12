@@ -136,6 +136,9 @@ class ElevenLabsConnection {
       return;
     }
 
+    const messageContextId = msg.contextId || msg.context_id;
+    console.log("messageContextId: ", messageContextId);
+
     // Handle audio chunks
     if (msg.audio) {
       const cleanAudioBase64 = msg.audio.replace(/\s/g, "");
@@ -158,7 +161,7 @@ class ElevenLabsConnection {
     // Handle final chunk
     if (msg.isFinal === true) {
       // 🔥 FIX: Capture contextId BEFORE it might be cleared
-      const finalContextId = this.contextId;
+      const finalContextId = messageContextId || this.contextId;
 
       if (finalContextId) {
         this.socket.emit("ai-audio-complete", { contextId: finalContextId });
