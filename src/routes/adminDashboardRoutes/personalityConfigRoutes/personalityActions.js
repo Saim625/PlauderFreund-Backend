@@ -1,6 +1,7 @@
 import express from "express";
-import PersonalityConfig from "../../../models/PersonalityConfig.js";
+import prisma from "../../../lib/db.js";
 import { verifyAdminToken } from "../../../middleware/verifyAdminToken.js";
+import { ELEVENLABS_VOICE_ID } from "../../../config/env.js";
 
 export const personalityActionRouter = express.Router();
 
@@ -15,10 +16,12 @@ personalityActionRouter.get(
   verifyAdminToken("canAccessPersonalisedConfig"),
   async (req, res) => {
     try {
-      const configs = await PersonalityConfig.find(
-        {},
-        { userToken: 1, updatedAt: 1, _id: 0 }
-      ).lean();
+      const configs = await prisma.personalityConfig.findMany({
+        select: {
+          userToken: true,
+          updatedAt: true,
+        },
+      });
 
       // 2. Format for Frontend (Optional but recommended)
       const formattedData = configs.map((config) => ({
@@ -48,12 +51,19 @@ personalityActionRouter.get(
     try {
       const { token } = req.params;
 
-      // Use upsert logic directly in findOne to handle auto-creation atomically
-      const config = await PersonalityConfig.findOneAndUpdate(
-        { userToken: token },
-        { $setOnInsert: { userToken: token } }, // Only set token if document is being created
-        { new: true, upsert: true, setDefaultsOnInsert: true }
-      );
+      // Find or create config
+      let config = await prisma.personalityConfig.findUnique({
+        where: { userToken: token },
+      });
+
+      if (!config) {
+        config = await prisma.personalityConfig.create({
+          data: { 
+            userToken: token,
+            voiceId: ELEVENLABS_VOICE_ID || undefined,
+          },
+        });
+      }
 
       return res.status(200).json({
         success: true,
@@ -82,12 +92,29 @@ personalityActionRouter.put(
       // We sanitize the body to ensure userToken cannot be changed manually via API
       const updateData = { ...req.body };
       delete updateData.userToken;
+      delete updateData.id; // Remove id if present
 
-      const updated = await PersonalityConfig.findOneAndUpdate(
-        { userToken: token },
-        { $set: updateData },
-        { new: true, upsert: true, runValidators: true }
-      );
+      // Find or create config
+      let config = await prisma.personalityConfig.findUnique({
+        where: { userToken: token },
+      });
+
+      if (!config) {
+        config = await prisma.personalityConfig.create({
+          data: { 
+            userToken: token,
+            voiceId: ELEVENLABS_VOICE_ID || undefined,
+            ...updateData,
+          },
+        });
+      } else {
+        config = await prisma.personalityConfig.update({
+          where: { userToken: token },
+          data: updateData,
+        });
+      }
+
+      const updated = config;
 
       return res.status(200).json({
         success: true,
@@ -115,10 +142,19 @@ personalityActionRouter.post(
       const { token } = req.params;
 
       // Delete existing custom settings
-      await PersonalityConfig.findOneAndDelete({ userToken: token });
+      await prisma.personalityConfig.delete({
+        where: { userToken: token },
+      }).catch(() => {
+        // Ignore if doesn't exist
+      });
 
-      // Create a fresh config which will use the default values defined in your Mongoose Schema
-      const freshConfig = await PersonalityConfig.create({ userToken: token });
+      // Create a fresh config which will use the default values defined in Prisma schema
+      const freshConfig = await prisma.personalityConfig.create({
+        data: { 
+          userToken: token,
+          voiceId: ELEVENLABS_VOICE_ID || undefined,
+        },
+      });
 
       return res.status(200).json({
         success: true,

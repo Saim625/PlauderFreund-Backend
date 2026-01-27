@@ -1,0 +1,104 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model UserAccessToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model AdminAccessToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  role      String   @default("ADMIN") // MAIN_ADMIN or ADMIN
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  
+  // Permissions
+  canManageUsers           Boolean @default(false)
+  canCreateTokens          Boolean @default(false)
+  canDeleteTokens          Boolean @default(false)
+  canEditAdmin             Boolean @default(false)
+  canAccessMemoryEditor    Boolean @default(false)
+  canAccessPersonalisedConfig Boolean @default(false)
+}
+
+model AdminAccountPassword {
+  id                          Int       @id @default(autoincrement())
+  role                        String    // MAIN_ADMIN
+  email                       String    @unique @default("kontakt@seniorenassistenz-henning.de")
+  passwordHash                String
+  resetPasswordToken          String?
+  resetPasswordTokenExpiresAt DateTime?
+  isActive                    Boolean   @default(true)
+  createdAt                   DateTime  @default(now())
+}
+
+model Message {
+  id        Int      @id @default(autoincrement())
+  role      String   // "user" or "ai"
+  text      String
+  processed Boolean  @default(false)
+  createdAt DateTime @default(now())
+  conversationId Int
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+model Conversation {
+  id        Int       @id @default(autoincrement())
+  token     String    @unique
+  updatedAt DateTime  @default(now())
+  messages  Message[]
+}
+
+model MemorySummaryItem {
+  id          Int      @id @default(autoincrement())
+  category    String
+  key         String
+  value       String
+  lastUpdated DateTime @default(now())
+  memorySummaryId Int
+  memorySummary   MemorySummary @relation(fields: [memorySummaryId], references: [id], onDelete: Cascade)
+}
+
+model MemorySummary {
+  id        Int                 @id @default(autoincrement())
+  token     String              @unique
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @default(now())
+  summary   MemorySummaryItem[]
+}
+
+model PersonalityConfig {
+  id                      Int      @id @default(autoincrement())
+  userToken               String   @unique
+  voiceId                 String?
+  speakingSpeed           String   @default("normal") // "slow", "normal", "fast"
+  empathyLevel            String   @default("medium") // "low", "medium", "high"
+  activePrompting         Boolean  @default(true)
+  reminderOffers          Boolean  @default(true)
+  reengageAfterSilence    Boolean  @default(true)
+  expertise               String   @default("general") // "general", "psychology", "meditation", "productivity", "coaching", "therapy"
+  
+  // Personality traits
+  calm                    Boolean  @default(true)
+  humorous                Boolean  @default(false)
+  supportive              Boolean  @default(true)
+  direct                  Boolean  @default(false)
+  
+  // Conversation guidelines (stored as JSON string or array)
+  conversationGuidelines  String[] @default([])
+  
+  isActive                Boolean  @default(true)
+  updatedBy               String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}

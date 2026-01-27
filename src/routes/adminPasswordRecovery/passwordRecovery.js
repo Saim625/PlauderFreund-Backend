@@ -3,7 +3,7 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import { EMAIL_PASS, FRONTEND_URL, USER_NAME } from "../../config/env.js";
-import AdminAccountPassword from "../../models/AdminAccountPassword.js";
+import prisma from "../../lib/db.js";
 
 export const adminPasswordRouter = express.Router();
 
@@ -14,10 +14,12 @@ adminPasswordRouter.post("/admin/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
 
-    const admin = await AdminAccountPassword.findOne({
-      email,
-      role: "MAIN_ADMIN",
-      isActive: true,
+    const admin = await prisma.adminAccountPassword.findFirst({
+      where: {
+        email,
+        role: "MAIN_ADMIN",
+        isActive: true,
+      },
     });
 
     if (!admin) {
@@ -30,10 +32,13 @@ adminPasswordRouter.post("/admin/forgot-password", async (req, res) => {
       .update(resetToken)
       .digest("hex");
 
-    admin.resetPasswordToken = hashedToken;
-    admin.resetPasswordTokenExpiresAt = Date.now() + 15 * 60 * 1000; // 15 min
-
-    await admin.save();
+    await prisma.adminAccountPassword.update({
+      where: { id: admin.id },
+      data: {
+        resetPasswordToken: hashedToken,
+        resetPasswordTokenExpiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 min
+      },
+    });
 
     const resetLink = `${FRONTEND_URL}/admin/reset-password?token=${resetToken}`;
 
@@ -81,11 +86,15 @@ adminPasswordRouter.post("/admin/reset-password", async (req, res) => {
 
     const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
 
-    const admin = await AdminAccountPassword.findOne({
-      resetPasswordToken: hashedToken,
-      resetPasswordTokenExpiresAt: { $gt: Date.now() },
-      role: "MAIN_ADMIN",
-      isActive: true,
+    const admin = await prisma.adminAccountPassword.findFirst({
+      where: {
+        resetPasswordToken: hashedToken,
+        resetPasswordTokenExpiresAt: {
+          gt: new Date(),
+        },
+        role: "MAIN_ADMIN",
+        isActive: true,
+      },
     });
 
     if (!admin) {
@@ -95,11 +104,16 @@ adminPasswordRouter.post("/admin/reset-password", async (req, res) => {
       });
     }
 
-    admin.passwordHash = await bcrypt.hash(newPassword, 10);
-    admin.resetPasswordToken = undefined;
-    admin.resetPasswordTokenExpiresAt = undefined;
-
-    await admin.save();
+    const newPasswordHash = await bcrypt.hash(newPassword, 10);
+    
+    await prisma.adminAccountPassword.update({
+      where: { id: admin.id },
+      data: {
+        passwordHash: newPasswordHash,
+        resetPasswordToken: null,
+        resetPasswordTokenExpiresAt: null,
+      },
+    });
 
     res.json({ success: true, message: "Password reset successful" });
   } catch (err) {

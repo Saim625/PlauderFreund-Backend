@@ -1,6 +1,6 @@
 import express from "express";
 import { v4 as uuidv4 } from "uuid";
-import AdminAccessToken from "../../../models/AdminAccessToken.js";
+import prisma from "../../../lib/db.js";
 import { verifyAdminToken } from "../../../middleware/verifyAdminToken.js";
 
 export const adminActionRouter = express.Router();
@@ -21,7 +21,7 @@ adminActionRouter.get(
           .json({ success: false, message: "Only Main Admin allowed" });
       }
 
-      const admins = await AdminAccessToken.find().select("-__v"); // exclude __v
+      const admins = await prisma.adminAccessToken.findMany();
       return res.json({ success: true, admins });
     } catch (err) {
       console.error("Get admins error:", err);
@@ -48,10 +48,10 @@ adminActionRouter.post(
       // generate token (alphanumeric)
       const token = uuidv4().replace(/-/g, "").slice(0, 7);
 
-      const newAdmin = await AdminAccessToken.create({
-        token,
-        role,
-        permissions: {
+      const newAdmin = await prisma.adminAccessToken.create({
+        data: {
+          token,
+          role,
           canManageUsers: !!permissions.canManageUsers,
           canCreateTokens: !!permissions.canCreateTokens,
           canDeleteTokens: !!permissions.canDeleteTokens,
@@ -87,7 +87,18 @@ adminActionRouter.put(
         });
       }
 
-      const target = await AdminAccessToken.findById(req.params.id);
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid admin ID",
+        });
+      }
+
+      const target = await prisma.adminAccessToken.findUnique({
+        where: { id },
+      });
+      
       if (!target)
         return res
           .status(404)
@@ -100,8 +111,12 @@ adminActionRouter.put(
           .json({ success: false, message: "Main Admin cannot be toggled" });
       }
 
-      target.isActive = !target.isActive;
-      await target.save();
+      const updated = await prisma.adminAccessToken.update({
+        where: { id: target.id },
+        data: { isActive: !target.isActive },
+      });
+      
+      target.isActive = updated.isActive;
 
       return res.json({
         success: true,
@@ -130,7 +145,18 @@ adminActionRouter.delete(
         });
       }
 
-      const target = await AdminAccessToken.findById(req.params.id);
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid admin ID",
+        });
+      }
+
+      const target = await prisma.adminAccessToken.findUnique({
+        where: { id },
+      });
+      
       if (!target)
         return res
           .status(404)
@@ -149,7 +175,9 @@ adminActionRouter.delete(
         });
       }
 
-      await AdminAccessToken.findByIdAndDelete(req.params.id);
+      await prisma.adminAccessToken.delete({
+        where: { id: target.id },
+      });
       return res.json({ success: true, message: "Admin deleted" });
     } catch (err) {
       console.error("Delete admin error:", err);
@@ -173,7 +201,18 @@ adminActionRouter.put(
           .status(400)
           .json({ success: false, message: "newToken is required" });
 
-      const target = await AdminAccessToken.findById(req.params.id);
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid admin ID",
+        });
+      }
+
+      const target = await prisma.adminAccessToken.findUnique({
+        where: { id },
+      });
+      
       if (!target)
         return res
           .status(404)
@@ -194,8 +233,12 @@ adminActionRouter.put(
         });
       }
 
-      target.token = newToken;
-      await target.save();
+      const updated = await prisma.adminAccessToken.update({
+        where: { id: target.id },
+        data: { token: newToken },
+      });
+      
+      target.token = updated.token;
 
       return res.json({
         success: true,

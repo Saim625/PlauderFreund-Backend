@@ -1,6 +1,6 @@
 import express from "express";
 import { verifyAdminToken } from "../../../../middleware/verifyAdminToken.js";
-import MemorySummary from "../../../../models/MemorySummary.js";
+import prisma from "../../../../lib/db.js";
 
 export const summaryEditorRouter = express.Router();
 
@@ -11,8 +11,10 @@ summaryEditorRouter.delete(
     try {
       const { token } = req.params;
 
-      // Use findOneAndDelete to ensure we are targeting the custom 'token' field
-      const deletedSummary = await MemorySummary.findOneAndDelete({ token });
+      // Delete memory summary
+      const deletedSummary = await prisma.memorySummary.delete({
+        where: { token },
+      });
 
       if (!deletedSummary) {
         return res.status(404).json({
@@ -52,12 +54,35 @@ summaryEditorRouter.delete(
         });
       }
 
-      // $pull targets objects in the 'summary' array that match both the category and key
-      const updated = await MemorySummary.findOneAndUpdate(
-        { token },
-        { $pull: { summary: { category, key } } },
-        { new: true } // Return the document AFTER the item is removed
+      // Find memory summary
+      const memorySummary = await prisma.memorySummary.findUnique({
+        where: { token },
+        include: { summary: true },
+      });
+
+      if (!memorySummary) {
+        return res.status(404).json({
+          success: false,
+          message: "User Summary not found.",
+        });
+      }
+
+      // Find and delete the item
+      const itemToDelete = memorySummary.summary.find(
+        (item) => item.category === category && item.key === key
       );
+
+      if (itemToDelete) {
+        await prisma.memorySummaryItem.delete({
+          where: { id: itemToDelete.id },
+        });
+      }
+
+      // Get updated summary
+      const updated = await prisma.memorySummary.findUnique({
+        where: { token },
+        include: { summary: true },
+      });
 
       if (!updated) {
         return res.status(404).json({
@@ -96,21 +121,46 @@ summaryEditorRouter.put(
         });
       }
 
-      // The positional operator "$" identifies the correct element in the array to update.
-      const updated = await MemorySummary.findOneAndUpdate(
-        {
-          token,
-          "summary.key": key,
-          "summary.category": category,
-        },
-        {
-          $set: {
-            "summary.$.value": value,
-            "summary.$.lastUpdated": new Date(),
-          },
-        },
-        { new: true }
+      // Find memory summary
+      const memorySummary = await prisma.memorySummary.findUnique({
+        where: { token },
+        include: { summary: true },
+      });
+
+      if (!memorySummary) {
+        return res.status(404).json({
+          success: false,
+          message: "User Summary not found.",
+        });
+      }
+
+      // Find the item to update
+      const itemToUpdate = memorySummary.summary.find(
+        (item) => item.key === key && item.category === category
       );
+
+      if (!itemToUpdate) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Memory item not found. Ensure the Key and Category are correct.",
+        });
+      }
+
+      // Update the item
+      await prisma.memorySummaryItem.update({
+        where: { id: itemToUpdate.id },
+        data: {
+          value: String(value),
+          lastUpdated: new Date(),
+        },
+      });
+
+      // Get updated summary
+      const updated = await prisma.memorySummary.findUnique({
+        where: { token },
+        include: { summary: true },
+      });
 
       if (!updated) {
         return res.status(404).json({
@@ -148,43 +198,67 @@ summaryEditorRouter.post(
           .json({ success: false, message: "Missing fields" });
       }
 
-      // 1. Check if the item already exists
-      const existing = await MemorySummary.findOne({
-        token,
-        "summary.key": key,
-        "summary.category": category,
+      // 1. Find or create memory summary
+      let memorySummary = await prisma.memorySummary.findUnique({
+        where: { token },
+        include: { summary: true },
       });
 
-      if (existing) {
-        // 2. If it exists, UPDATE it instead of adding a duplicate
-        const updated = await MemorySummary.findOneAndUpdate(
-          { token, "summary.key": key, "summary.category": category },
-          {
-            $set: {
-              "summary.$.value": value,
-              "summary.$.lastUpdated": new Date(),
-            },
+      if (!memorySummary) {
+        memorySummary = await prisma.memorySummary.create({
+          data: {
+            token,
           },
-          { new: true }
-        );
-        return res
-          .status(200)
-          .json({
-            success: true,
-            message: "Updated existing item",
-            summary: updated.summary,
-          });
+          include: { summary: true },
+        });
       }
 
-      // 3. If it doesn't exist, PUSH a new one (upsert creates the doc if missing)
-      const updated = await MemorySummary.findOneAndUpdate(
-        { token },
-        {
-          $push: { summary: { category, key, value, lastUpdated: new Date() } },
-          $set: { updatedAt: new Date() },
-        },
-        { new: true, upsert: true } // upsert: true handles the "create if not exists" logic
+      // 2. Check if the item already exists
+      const existingItem = memorySummary.summary.find(
+        (item) => item.key === key && item.category === category
       );
+
+      if (existingItem) {
+        // 3. If it exists, UPDATE it instead of adding a duplicate
+        await prisma.memorySummaryItem.update({
+          where: { id: existingItem.id },
+          data: {
+            value: String(value),
+            lastUpdated: new Date(),
+          },
+        });
+
+        const updated = await prisma.memorySummary.findUnique({
+          where: { token },
+          include: { summary: true },
+        });
+
+        return res.status(200).json({
+          success: true,
+          message: "Updated existing item",
+          summary: updated.summary,
+        });
+      }
+
+      // 4. If it doesn't exist, create a new one
+      await prisma.memorySummaryItem.create({
+        data: {
+          category,
+          key,
+          value: String(value),
+          memorySummaryId: memorySummary.id,
+        },
+      });
+
+      await prisma.memorySummary.update({
+        where: { id: memorySummary.id },
+        data: { updatedAt: new Date() },
+      });
+
+      const updated = await prisma.memorySummary.findUnique({
+        where: { token },
+        include: { summary: true },
+      });
 
       return res
         .status(201)

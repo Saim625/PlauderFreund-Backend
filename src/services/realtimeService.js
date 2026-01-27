@@ -1,8 +1,12 @@
 import WebSocket from "ws";
 import logger from "../utils/logger.js";
-import { OPENAI_API_KEY, OPENAI_REALTIME_API } from "../config/env.js";
+import {
+  OPENAI_API_KEY,
+  OPENAI_REALTIME_API,
+  ELEVENLABS_VOICE_ID,
+} from "../config/env.js";
 import { greetingStore } from "../state/greetingStore.js";
-import PersonalityConfig from "../models/PersonalityConfig.js";
+import prisma from "../lib/db.js";
 import { buildOpenAIPrompt } from "./buildOpenAiPrompt.js";
 
 /**
@@ -15,15 +19,36 @@ export async function connectToRealtimeAPI(summary = [], token) {
   const greetingText = greetingStore.get(token);
   greetingStore.delete(token);
 
-  let personalityConfig = await PersonalityConfig.findOne({ userToken: token });
+  let personalityConfig = await prisma.personalityConfig.findUnique({
+    where: { userToken: token },
+  });
   if (!personalityConfig) {
-    personalityConfig = await PersonalityConfig.create({ userToken: token });
+    personalityConfig = await prisma.personalityConfig.create({
+      data: {
+        userToken: token,
+        voiceId: ELEVENLABS_VOICE_ID || undefined,
+      },
+    });
   }
 
-  const memoryText =
-    Array.isArray(summary) && summary.length
-      ? summary.map((item) => `• ${item}`).join("\n")
-      : "No prior memory available.";
+  const hasMemory = summary.length > 0;
+
+  const structuredMemory = summary.reduce((acc, item) => {
+    acc[item.category] ??= [];
+    acc[item.category].push({
+      key: item.key,
+      value: item.value,
+    });
+    return acc;
+  }, {});
+
+  const memoryText = Object.entries(structuredMemory)
+    .map(
+      ([category, items]) =>
+        `## ${category}\n` +
+        items.map((i) => `• ${i.key}: ${i.value}`).join("\n"),
+    )
+    .join("\n\n");
 
   /* -------------------------
      ONLY BEHAVIOR GOES HERE
@@ -75,7 +100,7 @@ ${personalityInstructions}
             },
             instructions: behaviorInstructions,
           },
-        })
+        }),
       );
     });
 
@@ -106,26 +131,28 @@ ${personalityInstructions}
                   },
                 ],
               },
-            })
+            }),
           );
         }
 
         /* Inject memory safely (hidden) */
-        ws.send(
-          JSON.stringify({
-            type: "conversation.item.create",
-            item: {
-              type: "message",
-              role: "system",
-              content: [
-                {
-                  type: "input_text",
-                  text: `User memory:\n${memoryText}`,
-                },
-              ],
-            },
-          })
-        );
+        if (hasMemory) {
+          ws.send(
+            JSON.stringify({
+              type: "conversation.item.create",
+              item: {
+                type: "message",
+                role: "system",
+                content: [
+                  {
+                    type: "input_text",
+                    text: `User memory (for internal context only, do not mention unless relevant):\n${memoryText}`,
+                  },
+                ],
+              },
+            }),
+          );
+        }
 
         resolve(ws);
       }

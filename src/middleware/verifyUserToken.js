@@ -1,4 +1,4 @@
-import UserAccessToken from "../models/UserAccessToken.js";
+import prisma from "../lib/db.js";
 
 export function verifyUserToken() {
   return async (req, res, next) => {
@@ -11,9 +11,11 @@ export function verifyUserToken() {
           .json({ success: false, message: "Token missing" });
       }
 
-      const userRecord = await UserAccessToken.findOne({
-        token,
-        isActive: true,
+      const userRecord = await prisma.userAccessToken.findFirst({
+        where: {
+          token,
+          isActive: true,
+        },
       });
 
       if (!userRecord) {

@@ -1,11 +1,9 @@
 // routes/adminDashboardRoutes/userManagementRoutes/actions.js
 import express from "express";
-import UserAccessToken from "../../../models/UserAccessToken.js";
+import prisma from "../../../lib/db.js";
 import { verifyAdminToken } from "../../../middleware/verifyAdminToken.js";
 import { v4 as uuidv4 } from "uuid";
-import MemorySummary from "../../../models/MemorySummary.js";
-import PersonalityConfig from "../../../models/PersonalityConfig.js";
-import Conversation from "../../../models/Conversation.js";
+import { ELEVENLABS_VOICE_ID } from "../../../config/env.js";
 
 export const actionRouter = express.Router();
 
@@ -15,9 +13,17 @@ actionRouter.put(
   verifyAdminToken(["canManageUsers"]),
   async (req, res) => {
     try {
-      const userTokenId = req.params.id;
+      const userTokenId = parseInt(req.params.id);
+      if (isNaN(userTokenId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid token ID",
+        });
+      }
       console.log(userTokenId);
-      const userRecord = await UserAccessToken.findById(userTokenId);
+      const userRecord = await prisma.userAccessToken.findUnique({
+        where: { id: userTokenId },
+      });
 
       if (!userRecord) {
         return res.status(404).json({
@@ -34,8 +40,12 @@ actionRouter.put(
         });
       }
 
-      userRecord.isActive = !userRecord.isActive;
-      await userRecord.save();
+      const updated = await prisma.userAccessToken.update({
+        where: { id: userTokenId },
+        data: { isActive: !userRecord.isActive },
+      });
+      
+      userRecord.isActive = updated.isActive;
 
       return res.json({
         success: true,
@@ -60,8 +70,16 @@ actionRouter.delete(
   verifyAdminToken(["canDeleteTokens"]),
   async (req, res) => {
     try {
-      const tokenId = req.params.id;
-      const userRecord = await UserAccessToken.findById(tokenId);
+      const tokenId = parseInt(req.params.id);
+      if (isNaN(tokenId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid token ID",
+        });
+      }
+      const userRecord = await prisma.userAccessToken.findUnique({
+        where: { id: tokenId },
+      });
 
       if (!userRecord) {
         return res.status(404).json({
@@ -77,19 +95,20 @@ actionRouter.delete(
         });
       }
 
-      if (userRecord.isAdmin) {
-        return res.status(403).json({
-          success: false,
-          message: "Admin tokens cannot be deleted",
-        });
-      }
+      // Note: isAdmin field doesn't exist in UserAccessToken model
+      // If needed, this check can be removed or handled differently
 
-      await UserAccessToken.findByIdAndDelete(tokenId);
+      // Delete related data
       await Promise.all([
-        MemorySummary.deleteOne({ token: userRecord.token }),
-        PersonalityConfig.deleteOne({ userToken: userRecord.token }),
-        Conversation.deleteOne({ token: userRecord.token }),
+        prisma.memorySummary.deleteMany({ where: { token: userRecord.token } }),
+        prisma.personalityConfig.deleteMany({ where: { userToken: userRecord.token } }),
+        prisma.conversation.deleteMany({ where: { token: userRecord.token } }),
       ]);
+
+      // Delete user token
+      await prisma.userAccessToken.delete({
+        where: { id: tokenId },
+      });
 
       return res.json({
         success: true,
@@ -119,14 +138,18 @@ actionRouter.post(
     try {
       const token = generateAlphaNumericToken(7);
 
-      const record = await UserAccessToken.create({
-        token,
-        isAdmin: false,
-        isActive: true,
+      const record = await prisma.userAccessToken.create({
+        data: {
+          token,
+          isActive: true,
+        },
       });
 
-      await PersonalityConfig.create({
-        userToken: token,
+      await prisma.personalityConfig.create({
+        data: {
+          userToken: token,
+          voiceId: ELEVENLABS_VOICE_ID || undefined,
+        },
       });
 
       return res.json({
@@ -134,7 +157,7 @@ actionRouter.post(
         message: "User invitation token generated",
         token,
         inviteUrl: `https://plauderfreund.de/?token=${token}`,
-        id: record._id,
+        id: record.id,
       });
     } catch (err) {
       console.error("Generate token error:", err);
@@ -153,7 +176,10 @@ actionRouter.get(
     try {
       const userToken = req.params.token;
 
-      const userSummary = await MemorySummary.findOne({ token: userToken });
+      const userSummary = await prisma.memorySummary.findUnique({
+        where: { token: userToken },
+        include: { summary: true },
+      });
 
       if (!userSummary) {
         return res.status(404).json({

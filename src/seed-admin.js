@@ -1,26 +1,48 @@
-import bcrypt from "bcrypt";
-import AdminAccountPassword from "./models/AdminAccountPassword.js";
-import mongoose from "mongoose";
-import { MONGO_URI } from "./config/env.js";
+import prisma from "./lib/db.js";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-const createMainAdmin = async () => {
-  await mongoose.connect(MONGO_URI);
-  console.log("✅ Connected to MongoDB");
+const createMainAdminToken = async () => {
+  try {
+    console.log("⏳ Connecting to VPS Database...");
+    await prisma.$connect();
 
-  const passwordHash = await bcrypt.hash("Admin@1212", 12);
+    const mainAdminToken = "abc111def"; // Change this!
 
-  await AdminAccountPassword.create({
-    role: "MAIN_ADMIN",
-    passwordHash,
-  });
+    const admin = await prisma.adminAccessToken.create({
+      data: {
+        token: mainAdminToken,
+        role: "MAIN_ADMIN",
+        isActive: true,
+        // Giving full permissions to the Main Admin
+        canManageUsers: true,
+        canCreateTokens: true,
+        canDeleteTokens: true,
+        canEditAdmin: true,
+        canAccessMemoryEditor: true,
+        canAccessPersonalisedConfig: true,
+      },
+    });
 
-  console.log("MAIN_ADMIN created");
+    console.log("✅ MAIN_ADMIN Access Token Created Successfully:");
+    console.table({
+      ID: admin.id,
+      Role: admin.role,
+      Token: admin.token,
+      Active: admin.isActive,
+    });
 
-  await mongoose.disconnect();
-  console.log("🔌 MongoDB disconnected");
+    await prisma.$disconnect();
+  } catch (error) {
+    if (error.code === "P2002") {
+      console.error("❌ Error: This token already exists in the database.");
+    } else {
+      console.error("❌ Error creating admin token:", error);
+    }
+    await prisma.$disconnect();
+    process.exit(1);
+  }
 };
 
-createMainAdmin();
+createMainAdminToken();

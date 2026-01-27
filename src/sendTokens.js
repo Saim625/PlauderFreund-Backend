@@ -1,19 +1,46 @@
-import mongoose from "mongoose";
 import dotenv from "dotenv";
-import { MONGO_URI } from "./config/env.js";
-import AdminAccessToken from "./models/AdminAccessToken.js";
+import prisma from "./lib/db.js";
 
 dotenv.config();
 
-await mongoose.connect(MONGO_URI);
-console.log("✅ Connected to MongoDB");
+const createTokens = async () => {
+  try {
+    // 1. Prepare the data (only 'token' is needed, isActive and createdAt are automatic)
+    const tokenStrings = [
+      "123mno456",
+      "mno333wse",
+      "792f013",
+      "ac807f7",
+      "9236bce",
+      "3c41c02",
+      "388c4ac",
+      "76ff7ae",
+    ];
 
-const tokens = [{ token: "developer", role: "MAIN_ADMIN" }];
+    // Format them for Prisma
+    const tokensToInsert = tokenStrings.map((t) => ({ token: t }));
 
-await AdminAccessToken.insertMany(tokens);
+    console.log("⏳ Connecting to PostgreSQL...");
+    await prisma.$connect();
 
-console.log("✅ Tokens inserted:");
-tokens.forEach((t) => console.log(t.token));
+    console.log("✅ Connected! Starting insertion...");
 
-await mongoose.disconnect();
-console.log("🔌 MongoDB disconnected");
+    // 2. Loop and Create
+    for (const tokenData of tokensToInsert) {
+      await prisma.userAccessToken.create({
+        data: tokenData,
+      });
+    }
+
+    console.log(`✅ Successfully inserted ${tokensToInsert.length} tokens.`);
+
+    await prisma.$disconnect();
+  } catch (error) {
+    console.error("❌ Error injecting tokens:", error);
+    // If you get a 'Unique constraint' error, it means the token is already in the DB
+    await prisma.$disconnect();
+    process.exit(1);
+  }
+};
+
+createTokens();

@@ -1,4 +1,4 @@
-import AdminAccessToken from "../models/AdminAccessToken.js";
+import prisma from "../lib/db.js";
 
 /**
  * Middleware to verify Admin token and check permissions.
@@ -17,9 +17,11 @@ export function verifyAdminToken(requiredPermissions = []) {
       }
 
       // Find the admin token in DB
-      const adminRecord = await AdminAccessToken.findOne({
-        token,
-        isActive: true,
+      const adminRecord = await prisma.adminAccessToken.findFirst({
+        where: {
+          token,
+          isActive: true,
+        },
       });
 
       if (!adminRecord) {
@@ -31,8 +33,26 @@ export function verifyAdminToken(requiredPermissions = []) {
 
       // MAIN_ADMIN bypasses permission checks
       if (adminRecord.role !== "MAIN_ADMIN") {
-        for (const perm of requiredPermissions) {
-          if (!adminRecord.permissions[perm]) {
+        // Handle both string and array permissions
+        const permissions = Array.isArray(requiredPermissions)
+          ? requiredPermissions
+          : requiredPermissions
+          ? [requiredPermissions]
+          : [];
+
+        for (const perm of permissions) {
+          // Map permission string to Prisma field name (camelCase)
+          const permissionMap = {
+            canManageUsers: "canManageUsers",
+            canCreateTokens: "canCreateTokens",
+            canDeleteTokens: "canDeleteTokens",
+            canEditAdmin: "canEditAdmin",
+            canAccessMemoryEditor: "canAccessMemoryEditor",
+            canAccessPersonalisedConfig: "canAccessPersonalisedConfig",
+          };
+
+          const permissionField = permissionMap[perm] || perm;
+          if (!adminRecord[permissionField]) {
             return res.status(403).json({
               success: false,
               message: `Permission denied: ${perm}`,
@@ -41,8 +61,18 @@ export function verifyAdminToken(requiredPermissions = []) {
         }
       }
 
-      // Attach admin info to request
-      req.admin = adminRecord;
+      // Attach admin info to request (with permissions object for compatibility)
+      req.admin = {
+        ...adminRecord,
+        permissions: {
+          canManageUsers: adminRecord.canManageUsers,
+          canCreateTokens: adminRecord.canCreateTokens,
+          canDeleteTokens: adminRecord.canDeleteTokens,
+          canEditAdmin: adminRecord.canEditAdmin,
+          canAccessMemoryEditor: adminRecord.canAccessMemoryEditor,
+          canAccessPersonalisedConfig: adminRecord.canAccessPersonalisedConfig,
+        },
+      };
 
       next();
     } catch (err) {

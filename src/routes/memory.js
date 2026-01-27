@@ -1,6 +1,6 @@
 import express from "express";
 import { updateMemorySummary } from "../controllers/memoryController.js";
-import MemorySummary from "../models/MemorySummary.js";
+import prisma from "../lib/db.js";
 
 export const memoryRouter = express.Router();
 
@@ -10,7 +10,11 @@ memoryRouter.get("/", async (req, res) => {
   if (!token)
     return res.status(400).json({ success: false, message: "Token required" });
 
-  const memory = await MemorySummary.findOne({ token });
+  const memory = await prisma.memorySummary.findUnique({
+    where: { token },
+    include: { summary: true },
+  });
+  
   if (!memory) return res.json({ success: true, data: [] });
 
   res.json({ success: true, data: memory.summary });

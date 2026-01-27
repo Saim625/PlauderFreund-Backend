@@ -1,5 +1,5 @@
 import express from "express";
-import MemorySummary from "../models/MemorySummary.js";
+import prisma from "../lib/db.js";
 import { getGPTResponse } from "../services/gptService.js";
 import { generateGreetingAudio } from "../services/generateGreetingAudio.js";
 import { greetingStore } from "../state/greetingStore.js";
@@ -14,8 +14,15 @@ greetingRouter.post("/generate-greeting", async (req, res) => {
       return res.status(400).json({ error: "Token is required" });
     }
 
-    const memory = await MemorySummary.findOne({ token });
-    const summary = memory?.summary || "a new user";
+    const memory = await prisma.memorySummary.findUnique({
+      where: { token },
+      include: { summary: true },
+    });
+    const rawSummary = Array.isArray(memory?.summary) ? memory.summary : [];
+
+    const biographyText = rawSummary.length
+      ? rawSummary.map((i) => `${i.key}: ${i.value}`).join(", ")
+      : "No biography yet";
 
     // ✅ Fetch personality / voice config here
     const voiceConfig = await getVoiceConfigForToken(token);
@@ -32,7 +39,7 @@ greetingRouter.post("/generate-greeting", async (req, res) => {
         role: "user",
         content: `
         User Biography:
-        ${summary || "No biography yet"}
+        ${biographyText || "No biography yet"}
 
         Create the greeting now.
         `,

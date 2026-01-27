@@ -1,12 +1,15 @@
-import Conversation from "../models/Conversation.js";
+import prisma from "../lib/db.js";
 import { updateMemorySummary } from "../controllers/memoryController.js";
 import { getGPTResponse } from "./gptService.js";
-import MemorySummary from "../models/MemorySummary.js";
 
 export async function flushConversationToMemory(token) {
   console.log("🧠 Flushing conversation to memory:", token);
 
-  const convo = await Conversation.findOne({ token });
+  const convo = await prisma.conversation.findUnique({
+    where: { token },
+    include: { messages: true },
+  });
+  
   if (!convo || !convo.messages.length) return;
 
   // 1️⃣ Get unprocessed messages
@@ -20,7 +23,10 @@ export async function flushConversationToMemory(token) {
     )
     .join("\n");
 
-  const existingFacts = await MemorySummary.findOne({ token });
+  const existingFacts = await prisma.memorySummary.findUnique({
+    where: { token },
+    include: { summary: true },
+  });
 
   const prompt = `
 You are a memory extraction system designed to update a user's long-term memory.
@@ -93,22 +99,13 @@ Return a clean JSON array of objects, each with:
   // 5️⃣ Save memory
   await updateMemorySummary(token, facts);
 
-  // 6️⃣ Mark messages as processed
-  await Conversation.updateOne(
-    { token },
-    { $set: { "messages.$[m].processed": true } },
-    { arrayFilters: [{ "m.processed": false }] }
-  );
-
-  // Delete processed messages
-  await Conversation.updateOne(
-    { token },
-    {
-      $pull: {
-        messages: { processed: true },
-      },
-    }
-  );
+  // 6️⃣ Mark messages as processed and delete them
+  const unprocessedMessageIds = unprocessed.map((m) => m.id);
+  await prisma.message.deleteMany({
+    where: {
+      id: { in: unprocessedMessageIds },
+    },
+  });
 
   console.log(`✅ ${facts.length} facts stored & messages marked processed`);
 }

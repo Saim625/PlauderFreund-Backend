@@ -4,7 +4,7 @@ import { verifyUserToken } from "../middleware/verifyUserToken.js";
 import { verifyAdminToken } from "../middleware/verifyAdminToken.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import AdminAccountPassword from "../models/AdminAccountPassword.js";
+import prisma from "../lib/db.js";
 import { ADMIN_JWT_SECRET } from "../config/env.js";
 
 export const authRouter = express.Router();
@@ -60,9 +60,11 @@ authRouter.post(
       }
 
       // Fetch MAIN_ADMIN account
-      const adminAccount = await AdminAccountPassword.findOne({
-        role: "MAIN_ADMIN",
-        isActive: true,
+      const adminAccount = await prisma.adminAccountPassword.findFirst({
+        where: {
+          role: "MAIN_ADMIN",
+          isActive: true,
+        },
       });
 
       if (!adminAccount) {

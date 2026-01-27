@@ -14,7 +14,7 @@ import {
   markReengagementTriggered,
   sessions,
 } from "../services/reengagementEngine.js";
-import MemorySummary from "../models/MemorySummary.js";
+import prisma from "../lib/db.js";
 import { ingestConversationMessage } from "../utils/ingestConversationMessage.js";
 import { flushConversationToMemory } from "../services/flushConversationToMemory.js";
 import { getVoiceConfigForToken } from "../utils/getVoiceConfigForToken.js";
@@ -42,7 +42,10 @@ export async function handleRealtimeAI(socket, token) {
     logger.info(`✅ [${userId}] ElevenLabs initialized`);
 
     // 🔥 STEP 2: Load memory
-    const memory = await MemorySummary.findOne({ token });
+    const memory = await prisma.memorySummary.findUnique({
+      where: { token },
+      include: { summary: true },
+    });
     const summary = memory?.summary || [];
 
     // 🔥 STEP 3: Connect to GPT Realtime API
@@ -82,7 +85,7 @@ export async function handleRealtimeAI(socket, token) {
             "The user has been quiet. Say a short, friendly re-engagement sentence in the language user is talking. Be warm and natural. Do not ask multiple questions.",
           output_modalities: ["text"],
         },
-      })
+      }),
     );
   });
 
@@ -160,7 +163,7 @@ export async function handleRealtimeAI(socket, token) {
 
       if (oldContextId) {
         logger.info(
-          `🔄 [${userId}] Closing old context ${oldContextId} before starting new one`
+          `🔄 [${userId}] Closing old context ${oldContextId} before starting new one`,
         );
         connection.closeContext();
       }
@@ -182,7 +185,7 @@ export async function handleRealtimeAI(socket, token) {
 
       if (!connection) {
         logger.error(
-          `❌ [${userId}] No connection for text chunk #${textChunkCount}`
+          `❌ [${userId}] No connection for text chunk #${textChunkCount}`,
         );
         return;
       }
@@ -197,7 +200,7 @@ export async function handleRealtimeAI(socket, token) {
 
       if (!sendResult) {
         logger.error(
-          `❌ [${userId}] Failed to send text chunk #${textChunkCount}`
+          `❌ [${userId}] Failed to send text chunk #${textChunkCount}`,
         );
       }
     }
@@ -242,7 +245,7 @@ export async function handleRealtimeAI(socket, token) {
         JSON.stringify({
           type: "input_audio_buffer.append",
           audio: base64Audio,
-        })
+        }),
       );
     } catch (err) {
       logger.error(`❌ [${userId}] Error forwarding audio to GPT:`, err);
@@ -252,13 +255,13 @@ export async function handleRealtimeAI(socket, token) {
   // 🔊 Frontend finished playing audio
   socket.on("ai-audio-done", ({ contextId }) => {
     logger.info(
-      `🔊 [${userId}] Frontend confirmed playback done at ${new Date().toISOString()}`
+      `🔊 [${userId}] Frontend confirmed playback done at ${new Date().toISOString()}`,
     );
 
     // 🔥 FIX: Prevent duplicate processing of same contextId
     if (lastProcessedContextId === contextId) {
       logger.warn(
-        `⚠️ [${userId}] Duplicate ai-audio-done for context ${contextId}, ignoring`
+        `⚠️ [${userId}] Duplicate ai-audio-done for context ${contextId}, ignoring`,
       );
       return;
     }
@@ -274,7 +277,7 @@ export async function handleRealtimeAI(socket, token) {
 
     if (contextId !== connection.contextId) {
       logger.warn(
-        `⚠️ [${userId}] Context mismatch. Received=${contextId}, Active=${connection.contextId}`
+        `⚠️ [${userId}] Context mismatch. Received=${contextId}, Active=${connection.contextId}`,
       );
     }
 
@@ -288,7 +291,7 @@ export async function handleRealtimeAI(socket, token) {
 
     markAiPlaybackDone(userId);
     logger.info(
-      `✅ [${userId}] Playback marked as done. Re-engagement timer starts NOW.`
+      `✅ [${userId}] Playback marked as done. Re-engagement timer starts NOW.`,
     );
   });
 

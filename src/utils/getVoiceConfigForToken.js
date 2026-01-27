@@ -1,5 +1,5 @@
 import { ELEVENLABS_VOICE_ID } from "../config/env.js";
-import PersonalityConfig from "../models/PersonalityConfig.js";
+import prisma from "../lib/db.js";
 /**
  * Returns ElevenLabs voice + behavior config for a user token
  * @param {string} token
@@ -14,10 +14,12 @@ export async function getVoiceConfigForToken(token) {
     throw new Error("Token is required to fetch voice config");
   }
 
-  const personality = await PersonalityConfig.findOne({
-    userToken: token,
-    isActive: true,
-  }).lean();
+  const personality = await prisma.personalityConfig.findFirst({
+    where: {
+      userToken: token,
+      isActive: true,
+    },
+  });
 
   // 🔁 Fallback if no config exists (old tokens / safety)
   if (!personality) {

@@ -37,3 +37,4 @@ Thumbs.db
 tmp/
 *.tmp
 *.swp
+/src/generated/prisma

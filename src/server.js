@@ -6,6 +6,7 @@ import registerSocketHandler from "./socketHandler.js";
 import logger from "./utils/logger.js";
 import { PORT } from "./config/env.js";
 import { DB_CONNECTION } from "./config/database.js";
+import prisma from "./lib/db.js";
 import { authRouter } from "./routes/auth.js";
 import { memoryRouter } from "./routes/memory.js";
 import cors from "cors";
@@ -91,11 +92,13 @@ DB_CONNECTION()
 process.on("SIGTERM", async () => {
   logger.info("🛑 SIGTERM received, cleaning up...");
   cleanupAllConnections();
+  await prisma.$disconnect();
   process.exit(0);
 });
 
 process.on("SIGINT", async () => {
   logger.info("🛑 SIGINT received, cleaning up...");
   cleanupAllConnections();
+  await prisma.$disconnect();
   process.exit(0);
 });
