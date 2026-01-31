@@ -265,7 +265,7 @@ adminActionRouter.post(
       if (!/^\d{10,15}$/.test(numberStr)) {
         return res.status(400).json({
           success: false,
-          message: "Number must be 11 or 12 digits",
+          message: "Number must be between 10 to 15 digits",
         });
       }
 
