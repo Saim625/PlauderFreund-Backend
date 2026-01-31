@@ -16,6 +16,15 @@ import { buildOpenAIPrompt } from "./buildOpenAiPrompt.js";
  * @returns {Promise<WebSocket>}
  */
 export async function connectToRealtimeAPI(summary = [], token) {
+  const userToken = await prisma.userAccessToken.findFirst({
+    where: {
+      token: token,
+      isActive: true, // Optional: also check if active
+    },
+  });
+  if (!userToken) {
+    throw new Error("Unauthorized: Invalid or inactive token");
+  }
   const greetingText = greetingStore.get(token);
   greetingStore.delete(token);
 

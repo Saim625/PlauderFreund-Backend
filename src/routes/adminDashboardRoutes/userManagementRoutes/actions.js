@@ -14,12 +14,6 @@ actionRouter.put(
   async (req, res) => {
     try {
       const userTokenId = parseInt(req.params.id);
-      if (isNaN(userTokenId)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid token ID",
-        });
-      }
       console.log(userTokenId);
       const userRecord = await prisma.userAccessToken.findUnique({
         where: { id: userTokenId },
@@ -71,12 +65,6 @@ actionRouter.delete(
   async (req, res) => {
     try {
       const tokenId = parseInt(req.params.id);
-      if (isNaN(tokenId)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid token ID",
-        });
-      }
       const userRecord = await prisma.userAccessToken.findUnique({
         where: { id: tokenId },
       });

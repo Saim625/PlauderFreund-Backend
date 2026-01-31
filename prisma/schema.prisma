@@ -11,6 +11,7 @@ datasource db {
 model UserAccessToken {
   id        Int      @id @default(autoincrement())
   token     String   @unique
+  number    String?  @unique
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 }

@@ -27,7 +27,7 @@ adminActionRouter.get(
       console.error("Get admins error:", err);
       return res.status(500).json({ success: false, message: "Server error" });
     }
-  }
+  },
 );
 
 adminActionRouter.post(
@@ -72,7 +72,7 @@ adminActionRouter.post(
       console.error("Create admin error:", err);
       return res.status(500).json({ success: false, message: "Server error" });
     }
-  }
+  },
 );
 
 adminActionRouter.put(
@@ -87,18 +87,10 @@ adminActionRouter.put(
         });
       }
 
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid admin ID",
-        });
-      }
-
       const target = await prisma.adminAccessToken.findUnique({
-        where: { id },
+        where: { id: parseInt(req.params.id) },
       });
-      
+
       if (!target)
         return res
           .status(404)
@@ -115,7 +107,7 @@ adminActionRouter.put(
         where: { id: target.id },
         data: { isActive: !target.isActive },
       });
-      
+
       target.isActive = updated.isActive;
 
       return res.json({
@@ -127,7 +119,7 @@ adminActionRouter.put(
       console.error("Toggle admin error:", err);
       return res.status(500).json({ success: false, message: "Server error" });
     }
-  }
+  },
 );
 
 /**
@@ -145,18 +137,10 @@ adminActionRouter.delete(
         });
       }
 
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid admin ID",
-        });
-      }
-
       const target = await prisma.adminAccessToken.findUnique({
-        where: { id },
+        where: { id: parseInt(req.params.id) },
       });
-      
+
       if (!target)
         return res
           .status(404)
@@ -183,7 +167,7 @@ adminActionRouter.delete(
       console.error("Delete admin error:", err);
       return res.status(500).json({ success: false, message: "Server error" });
     }
-  }
+  },
 );
 
 /**
@@ -201,18 +185,10 @@ adminActionRouter.put(
           .status(400)
           .json({ success: false, message: "newToken is required" });
 
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid admin ID",
-        });
-      }
-
       const target = await prisma.adminAccessToken.findUnique({
-        where: { id },
+        where: { id: parseInt(req.params.id) },
       });
-      
+
       if (!target)
         return res
           .status(404)
@@ -237,7 +213,7 @@ adminActionRouter.put(
         where: { id: target.id },
         data: { token: newToken },
       });
-      
+
       target.token = updated.token;
 
       return res.json({
@@ -249,5 +225,210 @@ adminActionRouter.put(
       console.error("Edit admin token error:", err);
       return res.status(500).json({ success: false, message: "Server error" });
     }
-  }
+  },
+);
+
+// Assign number to user token (MAIN_ADMIN only)
+adminActionRouter.post(
+  "/token/:id/assign-number",
+  verifyAdminToken(), // Must be admin
+  async (req, res) => {
+    try {
+      // Only MAIN_ADMIN can assign numbers
+      if (req.admin.role !== "MAIN_ADMIN") {
+        return res.status(403).json({
+          success: false,
+          message: "Only Main Admin can assign numbers",
+        });
+      }
+
+      const userTokenId = parseInt(req.params.id);
+      if (isNaN(userTokenId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid token ID",
+        });
+      }
+
+      const { number } = req.body;
+
+      // Validation: Check if number is provided
+      if (!number) {
+        return res.status(400).json({
+          success: false,
+          message: "Number is required",
+        });
+      }
+
+      // Validation: Check if number is 11 or 12 digits
+      const numberStr = String(number).trim();
+      if (!/^\d{11,12}$/.test(numberStr)) {
+        return res.status(400).json({
+          success: false,
+          message: "Number must be 11 or 12 digits",
+        });
+      }
+
+      // Check if token exists
+      const userRecord = await prisma.userAccessToken.findUnique({
+        where: { id: userTokenId },
+      });
+
+      if (!userRecord) {
+        return res.status(404).json({
+          success: false,
+          message: "User token not found",
+        });
+      }
+
+      // Check if number is already assigned to another token
+      const existingNumber = await prisma.userAccessToken.findFirst({
+        where: {
+          number: numberStr,
+          id: { not: userTokenId }, // Exclude current token
+        },
+      });
+
+      if (existingNumber) {
+        return res.status(400).json({
+          success: false,
+          message: "This number is already assigned to another token",
+        });
+      }
+
+      // Assign the number
+      const updated = await prisma.userAccessToken.update({
+        where: { id: userTokenId },
+        data: { number: numberStr },
+      });
+
+      return res.json({
+        success: true,
+        message: "Number assigned successfully",
+        data: {
+          id: updated.id,
+          token: updated.token,
+          number: updated.number,
+        },
+      });
+    } catch (err) {
+      console.error("Assign number error:", err);
+
+      // Handle unique constraint violation
+      if (err.code === "P2002") {
+        return res.status(400).json({
+          success: false,
+          message: "This number is already assigned to another token",
+        });
+      }
+
+      return res.status(500).json({
+        success: false,
+        message: "Server error",
+        err,
+      });
+    }
+  },
+);
+
+// Update assigned number (MAIN_ADMIN only)
+adminActionRouter.put(
+  "/token/:id/update-number",
+  verifyAdminToken(), // Must be admin
+  async (req, res) => {
+    try {
+      // Only MAIN_ADMIN can update numbers
+      if (req.admin.role !== "MAIN_ADMIN") {
+        return res.status(403).json({
+          success: false,
+          message: "Only Main Admin can update numbers",
+        });
+      }
+
+      const userTokenId = parseInt(req.params.id);
+      if (isNaN(userTokenId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid token ID",
+        });
+      }
+
+      const { number } = req.body;
+
+      // Validation: Check if number is provided
+      if (!number) {
+        return res.status(400).json({
+          success: false,
+          message: "Number is required",
+        });
+      }
+
+      // Validation: Check if number is 11 or 12 digits
+      const numberStr = String(number).trim();
+      if (!/^\d{11,12}$/.test(numberStr)) {
+        return res.status(400).json({
+          success: false,
+          message: "Number must be 11 or 12 digits",
+        });
+      }
+
+      // Check if token exists
+      const userRecord = await prisma.userAccessToken.findUnique({
+        where: { id: userTokenId },
+      });
+
+      if (!userRecord) {
+        return res.status(404).json({
+          success: false,
+          message: "User token not found",
+        });
+      }
+
+      // Check if number is already assigned to another token
+      const existingNumber = await prisma.userAccessToken.findFirst({
+        where: {
+          number: numberStr,
+          id: { not: userTokenId }, // Exclude current token
+        },
+      });
+
+      if (existingNumber) {
+        return res.status(400).json({
+          success: false,
+          message: "This number is already assigned to another token",
+        });
+      }
+
+      // Update the number
+      const updated = await prisma.userAccessToken.update({
+        where: { id: userTokenId },
+        data: { number: numberStr },
+      });
+
+      return res.json({
+        success: true,
+        message: "Number updated successfully",
+        data: {
+          id: updated.id,
+          token: updated.token,
+          number: updated.number,
+        },
+      });
+    } catch (err) {
+      console.error("Update number error:", err);
+
+      // Handle unique constraint violation
+      if (err.code === "P2002") {
+        return res.status(400).json({
+          success: false,
+          message: "This number is already assigned to another token",
+        });
+      }
+
+      return res.status(500).json({
+        success: false,
+        message: "Server error",
+      });
+    }
+  },
 );

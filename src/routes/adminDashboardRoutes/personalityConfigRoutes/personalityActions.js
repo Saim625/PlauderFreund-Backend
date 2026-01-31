@@ -41,7 +41,7 @@ personalityActionRouter.get(
         message: "Failed to fetch personality tokens",
       });
     }
-  }
+  },
 );
 
 personalityActionRouter.get(
@@ -51,6 +51,16 @@ personalityActionRouter.get(
     try {
       const { token } = req.params;
 
+      const userToken = await prisma.userAccessToken.findFirst({
+        where: {
+          token: token,
+          isActive: true, // Optional: also check if active
+        },
+      });
+      if (!userToken) {
+        throw new Error("Unauthorized: Invalid or inactive token");
+      }
+
       // Find or create config
       let config = await prisma.personalityConfig.findUnique({
         where: { userToken: token },
@@ -58,7 +68,7 @@ personalityActionRouter.get(
 
       if (!config) {
         config = await prisma.personalityConfig.create({
-          data: { 
+          data: {
             userToken: token,
             voiceId: ELEVENLABS_VOICE_ID || undefined,
           },
@@ -75,7 +85,7 @@ personalityActionRouter.get(
         .status(500)
         .json({ success: false, message: "Internal Server Error" });
     }
-  }
+  },
 );
 
 /**
@@ -89,6 +99,16 @@ personalityActionRouter.put(
     try {
       const { token } = req.params;
 
+      const userToken = await prisma.userAccessToken.findFirst({
+        where: {
+          token: token,
+          isActive: true, // Optional: also check if active
+        },
+      });
+      if (!userToken) {
+        throw new Error("Unauthorized: Invalid or inactive token");
+      }
+
       // We sanitize the body to ensure userToken cannot be changed manually via API
       const updateData = { ...req.body };
       delete updateData.userToken;
@@ -101,9 +121,10 @@ personalityActionRouter.put(
 
       if (!config) {
         config = await prisma.personalityConfig.create({
-          data: { 
+          data: {
             userToken: token,
-            voiceId: ELEVENLABS_VOICE_ID || undefined,
+            // ✅ Use voiceId from updateData if provided, otherwise use default
+            voiceId: updateData.voiceId || ELEVENLABS_VOICE_ID || undefined,
             ...updateData,
           },
         });
@@ -127,7 +148,7 @@ personalityActionRouter.put(
         .status(500)
         .json({ success: false, message: "Failed to update configuration" });
     }
-  }
+  },
 );
 
 /**
@@ -141,16 +162,28 @@ personalityActionRouter.post(
     try {
       const { token } = req.params;
 
-      // Delete existing custom settings
-      await prisma.personalityConfig.delete({
-        where: { userToken: token },
-      }).catch(() => {
-        // Ignore if doesn't exist
+      const userToken = await prisma.userAccessToken.findFirst({
+        where: {
+          token: token,
+          isActive: true, // Optional: also check if active
+        },
       });
+      if (!userToken) {
+        throw new Error("Unauthorized: Invalid or inactive token");
+      }
+
+      // Delete existing custom settings
+      await prisma.personalityConfig
+        .delete({
+          where: { userToken: token },
+        })
+        .catch(() => {
+          // Ignore if doesn't exist
+        });
 
       // Create a fresh config which will use the default values defined in Prisma schema
       const freshConfig = await prisma.personalityConfig.create({
-        data: { 
+        data: {
           userToken: token,
           voiceId: ELEVENLABS_VOICE_ID || undefined,
         },
@@ -167,5 +200,5 @@ personalityActionRouter.post(
         .status(500)
         .json({ success: false, message: "Reset operation failed" });
     }
-  }
+  },
 );
