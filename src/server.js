@@ -23,7 +23,12 @@ import { cleanupAllConnections } from "./services/elevenlabWS.js";
 const app = express();
 
 const corsOptions = {
-  origin: ["https://plauderfreund.de", "http://localhost:5173"],
+  origin: [
+    "https://plauderfreund.de",
+    "http://plauderfreund.de",
+    "http://localhost:5173",
+    "http://81.169.190.167",
+  ],
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true, // optional but recommended
@@ -51,7 +56,11 @@ const httpServer = createServer(app);
 // Updated Socket.IO config
 const io = new Server(httpServer, {
   cors: {
-    origin: "https://plauderfreund.de",
+    origin: [
+      "https://plauderfreund.de",
+      "http://plauderfreund.de",
+      "http://localhost:5173",
+    ],
     methods: ["GET", "POST"],
   },
   transports: ["polling", "websocket"], // Add polling fallback
@@ -80,7 +89,7 @@ io.on("connection", (socket) => {
 DB_CONNECTION()
   .then(() => {
     logger.info("Connected to Database");
-    httpServer.listen(PORT, () => {
+    httpServer.listen(PORT, "0.0.0.0", () => {
       logger.info(`✅ Server running on http://localhost:${PORT}`);
     });
   })
