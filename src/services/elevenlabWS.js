@@ -151,9 +151,10 @@ class ElevenLabsConnection {
         contextId: this.contextId,
         index: currentIndex,
         audio: cleanAudioBase64,
+        sentAt: Date.now(),
         isFinal: msg.isFinal || false,
       };
-
+      console.log("TimeStamp: ", audioObj.sentAt);
       markAiSpeaking(this.socket.id);
       this.socket.emit("ai-audio-chunk", audioObj);
     }
@@ -166,11 +167,11 @@ class ElevenLabsConnection {
       if (finalContextId) {
         this.socket.emit("ai-audio-complete", { contextId: finalContextId });
         logger.info(
-          `✅ [${this.userId}] Audio stream complete for context: ${finalContextId}`
+          `✅ [${this.userId}] Audio stream complete for context: ${finalContextId}`,
         );
       } else {
         logger.warn(
-          `⚠️ [${this.userId}] Received isFinal but contextId is null`
+          `⚠️ [${this.userId}] Received isFinal but contextId is null`,
         );
       }
 
@@ -210,11 +211,11 @@ class ElevenLabsConnection {
     this.reconnectAttempts++;
     const delay = Math.min(
       1000 * Math.pow(2, this.reconnectAttempts - 1),
-      10000
+      10000,
     );
 
     logger.info(
-      `🔄 [${this.userId}] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`
+      `🔄 [${this.userId}] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`,
     );
 
     clearTimeout(this.reconnectTimeout);
@@ -242,7 +243,7 @@ class ElevenLabsConnection {
         } else if (elapsed > timeout) {
           clearInterval(checkInterval);
           logger.error(
-            `❌ [${this.userId}] Connection timeout after ${timeout}ms`
+            `❌ [${this.userId}] Connection timeout after ${timeout}ms`,
           );
           reject(new Error(`Connection timeout after ${timeout}ms`));
         }
@@ -269,22 +270,22 @@ class ElevenLabsConnection {
           voiceConfig.empathyLevel === "high"
             ? 0.35
             : voiceConfig.empathyLevel === "medium"
-            ? 0.55
-            : 0.75,
+              ? 0.55
+              : 0.75,
         similarity_boost: 0.8,
         style:
           voiceConfig.empathyLevel === "high"
             ? 0.65
             : voiceConfig.empathyLevel === "medium"
-            ? 0.3
-            : 0.15,
+              ? 0.3
+              : 0.15,
         use_speaker_boost: false,
         speed:
           voiceConfig.speakingSpeed === "slow"
             ? 0.7
             : voiceConfig.speakingSpeed === "fast"
-            ? 1.2
-            : 1.0,
+              ? 1.2
+              : 1.0,
       },
       generation_config: {
         chunk_length_schedule: [50, 60, 100, 120],
@@ -350,7 +351,7 @@ class ElevenLabsConnection {
           JSON.stringify({
             context_id: this.contextId,
             close_context: true,
-          })
+          }),
         );
         logger.info(`🧹 [${this.userId}] Context closed: ${this.contextId}`);
       } catch (error) {
