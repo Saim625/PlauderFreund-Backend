@@ -1,15 +1,16 @@
 import prisma from "../lib/db.js";
 import { updateMemorySummary } from "../controllers/memoryController.js";
 import { getGPTResponse } from "./gptService.js";
+import { parseAndSaveReminders } from "./reminderService.js"; // no longer calls GPT
 
-export async function flushConversationToMemory(token) {
+export async function flushConversationToMemory(token, timezone) {
   console.log("🧠 Flushing conversation to memory:", token);
 
   const convo = await prisma.conversation.findUnique({
     where: { token },
     include: { messages: true },
   });
-  
+
   if (!convo || !convo.messages.length) return;
 
   // 1️⃣ Get unprocessed messages
@@ -19,7 +20,7 @@ export async function flushConversationToMemory(token) {
   // 2️⃣ Build conversation text
   const conversationText = unprocessed
     .map((m) =>
-      m.role === "user" ? `USER: ${m.text}` : `ASSISTANT: ${m.text}`
+      m.role === "user" ? `USER: ${m.text}` : `ASSISTANT: ${m.text}`,
     )
     .join("\n");
 
@@ -28,52 +29,96 @@ export async function flushConversationToMemory(token) {
     include: { summary: true },
   });
 
+  const safeTimezone = timezone && timezone !== "undefined" ? timezone : "UTC";
+  const now = new Date();
+
+  // 3️⃣ Single combined prompt — facts + reminders in one GPT call
   const prompt = `
-You are a memory extraction system designed to update a user's long-term memory.
+You are a memory and reminder extraction system for a voice assistant.
 
 You are given:
-1) The user's EXISTING memory
+1) The user's EXISTING memory (facts already known)
 2) A NEW conversation
 
-Your job is to return ONLY facts that are:
-• New (not in memory yet)
-• Or if value is updated of existing fact (same key but different value)
+Your job is to return a JSON object with exactly two keys: "facts" and "reminders".
 
-DO NOT repeat facts that already exist and are unchanged.
-DO NOT rewrite or summarize the full memory.
+---
 
-The conversation is formatted with speaker roles (USER: and ASSISTANT:).
+## PART 1 — FACTS
 
-### Important Rules:
-- **USER messages** are the only source of truth.
-- **ASSISTANT messages** are included ONLY for context.
-  Never extract or assume facts based solely on what the assistant says.
+Extract only important, lasting facts about the user.
 
-### Extraction Guidelines:
+### Rules:
+- Only extract from USER messages. ASSISTANT messages are context only.
+- Do NOT extract reminders, tasks, appointments, or anything time-sensitive into facts.
+- Do NOT repeat facts that already exist and are unchanged.
+- Do NOT invent or infer anything not clearly stated by the user.
+- Only extract facts that are genuinely useful to remember long-term.
 
-1. **Target Facts:** Extract information that reveals something:
-   * **About the USER:** personal details (name, age, location, family, profession, background),
-     preferences (likes, dislikes, hobbies, habits), goals, current activities, emotional state, or personality traits.
-   * **About the ASSISTANT:** any name, personality, or traits the USER explicitly assigns to it 
-     (e.g., “Your name is Polo”, “Be my mentor”, “Act like a friend”, etc.)
+### What qualifies as a fact:
+- Personal details: name, age, location, family members, profession, health conditions
+- Preferences: likes, dislikes, hobbies, habits, food, language
+- Goals: things the user wants to achieve or is working toward
+- Personality traits explicitly mentioned
+- Identity assigned to the assistant (name, role, personality)
 
-2. **Ignore:** Anything said by the ASSISTANT unless it directly confirms or repeats a USER statement. 
-   Do not extract or modify facts based only on the ASSISTANT’s words.
+### What does NOT qualify as a fact:
+- One-off statements ("I'm tired today")
+- Reminders or appointments ("I have a doctor appointment Friday")
+- Medication schedules or tasks
+- Anything already in existing memory unchanged
 
-3. **Output Format:** 
-Return a clean JSON array of objects, each with:
+### Facts output format (array of objects):
 - "category": "Personal" | "Preference" | "Goal" | "Personality" | "Identity"
-- "key"
-- "value"
+- "key": short snake_case key
+- "value": the extracted value
 
-4. **Category Rules:**
-   * Facts about the USER → one of "Personal", "Preference", "Goal", "Personality"
-   * Facts about the ASSISTANT (given by USER) → use "Identity"
-     Example keys: "assistant_name", "assistant_role", "assistant_personality"
+If no new or changed facts, return empty array [].
 
-5. **Do NOT invent, guess, or infer information not clearly stated by the USER.**
+---
 
-6. If the conversation does not contain any new or changed information, return an empty JSON array: [].
+## PART 2 — REMINDERS
+
+Extract anything the user mentioned that is a future task, appointment, medication, birthday, or time-sensitive event.
+
+### TIME CONTEXT
+- Current UTC Time: ${now.toISOString()}
+- User Timezone: ${safeTimezone}
+- User Local Time: ${now.toLocaleString("en-US", { timeZone: safeTimezone })}
+
+All datetime fields must be ISO 8601 with correct offset for "${safeTimezone}". Never use UTC offset for user times.
+
+### Rules:
+- Only extract from USER messages.
+- Do NOT invent details not clearly stated.
+- If a field cannot be determined, use null.
+
+### remind_from / remind_until guidelines:
+- medication  → remind_from: 30 min before event_datetime, remind_until: 30 min after
+- appointment → remind_from: 24 hours before event_datetime, remind_until: event_datetime
+- birthday    → remind_from: 48 hours before event_datetime, remind_until: end of event day
+- general     → remind_from: now, remind_until: null
+
+### Reminders output format (array of objects):
+- "title": short clear title
+- "description": extra context or null
+- "reminder_type": "medication" | "appointment" | "birthday" | "general"
+- "event_datetime": ISO8601 with offset or null
+- "remind_from": ISO8601 with offset or null
+- "remind_until": ISO8601 with offset or null
+- "recurrence": "none" | "daily" | "weekly" | "yearly"
+
+If no reminders found, return empty array [].
+
+---
+
+## FINAL OUTPUT FORMAT
+Return ONLY this JSON. No explanation, no markdown:
+
+{
+  "facts": [...],
+  "reminders": [...]
+}
 
 ---
 
@@ -84,28 +129,39 @@ Return a clean JSON array of objects, each with:
 """${conversationText}"""
 `;
 
-  // 4️⃣ Ask GPT
+  // 4️⃣ Single GPT call
   const raw = await getGPTResponse([{ role: "user", content: prompt }]);
   if (!raw) return;
 
-  let facts;
+  let parsed;
   try {
-    facts = JSON.parse(raw.replace(/```json|```/g, "").trim());
+    parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
   } catch (err) {
     console.error("❌ GPT JSON parse failed:", raw);
     return;
   }
 
-  // 5️⃣ Save memory
-  await updateMemorySummary(token, facts);
+  const facts = Array.isArray(parsed.facts) ? parsed.facts : [];
+  const reminders = Array.isArray(parsed.reminders) ? parsed.reminders : [];
 
-  // 6️⃣ Mark messages as processed and delete them
+  // 5️⃣ Save facts
+  if (facts.length > 0) {
+    await updateMemorySummary(token, facts);
+    console.log(`✅ ${facts.length} facts stored`);
+  } else {
+    console.log("ℹ️ No new facts to store");
+  }
+
+  // 6️⃣ Delete processed messages
   const unprocessedMessageIds = unprocessed.map((m) => m.id);
   await prisma.message.deleteMany({
-    where: {
-      id: { in: unprocessedMessageIds },
-    },
+    where: { id: { in: unprocessedMessageIds } },
   });
 
-  console.log(`✅ ${facts.length} facts stored & messages marked processed`);
+  // 7️⃣ Save reminders (no GPT call — just parse + upsert)
+  try {
+    await parseAndSaveReminders(token, reminders);
+  } catch (err) {
+    console.error("❌ Reminder save failed (non-fatal):", err.message);
+  }
 }

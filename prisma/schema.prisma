@@ -14,6 +14,7 @@ model UserAccessToken {
   number    String?  @unique
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
+  reminders Reminder[]
 }
 
 model AdminAccessToken {
@@ -102,4 +103,52 @@ model PersonalityConfig {
   updatedBy               String?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
+}
+
+model Reminder {
+  id                        Int                   @id @default(autoincrement())
+  userToken                 String                @map("user_token")
+  
+  // Relations
+  user                      UserAccessToken       @relation(fields: [userToken], references: [token])
+  deliveryLogs              ReminderDeliveryLog[]
+
+  // Content
+  title                     String
+  description               String?
+  reminderType              String?               @map("reminder_type") @db.VarChar(50)
+  
+  // Timing
+  eventDatetime             DateTime?             @map("event_datetime") @db.Timestamptz
+  remindFrom                DateTime?             @map("remind_from") @db.Timestamptz
+  remindUntil               DateTime?             @map("remind_until") @db.Timestamptz
+  recurrence                String                @default("none") @db.VarChar(50)
+  
+  // Status & Tracking
+  status                    String                @default("active") @db.VarChar(30)
+  acknowledgedAt            DateTime?             @map("acknowledged_at") @db.Timestamptz
+  timesReminded             Int                   @default(0) @map("times_reminded")
+  maxRemindersPerSession    Int                   @default(1) @map("max_reminders_per_session")
+  
+  createdAt                 DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt                 DateTime              @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("reminders")
+}
+
+model ReminderDeliveryLog {
+  id               Int       @id @default(autoincrement())
+  reminderId       Int       @map("reminder_id")
+  userToken        String    @map("user_token")
+  
+  // Relations
+  reminder         Reminder  @relation(fields: [reminderId], references: [id], onDelete: Cascade)
+
+  // Delivery Details
+  sessionId        String    @map("session_id")
+  deliveredAt      DateTime  @default(now()) @map("delivered_at") @db.Timestamptz
+  deliveryStatus   String?   @map("delivery_status") @db.VarChar(30) // 'delivered', 'acknowledged'
+  acknowledgedAt   DateTime? @map("acknowledged_at") @db.Timestamptz
+
+  @@map("reminder_delivery_log")
 }

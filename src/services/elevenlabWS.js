@@ -137,7 +137,6 @@ class ElevenLabsConnection {
     }
 
     const messageContextId = msg.contextId || msg.context_id;
-    console.log("messageContextId: ", messageContextId);
 
     // Handle audio chunks
     if (msg.audio) {
@@ -154,7 +153,6 @@ class ElevenLabsConnection {
         sentAt: Date.now(),
         isFinal: msg.isFinal || false,
       };
-      console.log("TimeStamp: ", audioObj.sentAt);
       markAiSpeaking(this.socket.id);
       this.socket.emit("ai-audio-chunk", audioObj);
     }

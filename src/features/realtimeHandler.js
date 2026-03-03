@@ -18,13 +18,20 @@ import prisma from "../lib/db.js";
 import { ingestConversationMessage } from "../utils/ingestConversationMessage.js";
 import { flushConversationToMemory } from "../services/flushConversationToMemory.js";
 import { getVoiceConfigForToken } from "../utils/getVoiceConfigForToken.js";
+import { deliverRemindersOnSessionStart } from "../services/reminderScheduler.js"; // 👈 NEW
+import { handleReminderAcknowledgement } from "../services/reminderAcknowledgementHandler.js";
 
-export async function handleRealtimeAI(socket, token) {
+export async function handleRealtimeAI(socket, token, timezone) {
   let gptWs;
   let elevenConnection = null;
   let currentResponseId = null;
   let textChunkCount = 0;
   let lastProcessedContextId = null;
+
+  let userMessageCount = 0;
+  const REMINDER_TRIGGER_AFTER_MESSAGES = 3;
+
+  const safeTimeZone = timezone && timezone !== undefined ? timezone : "UTC";
 
   const userId = socket.id; // Use socket.id as unique user identifier
 
@@ -49,8 +56,11 @@ export async function handleRealtimeAI(socket, token) {
     const summary = memory?.summary || [];
 
     // 🔥 STEP 3: Connect to GPT Realtime API
-    gptWs = await connectToRealtimeAPI(summary, token);
+    gptWs = await connectToRealtimeAPI(summary, token, safeTimeZone);
     logger.info(`✅ [${userId}] GPT Realtime connected`);
+    // ✅ NEW: Attach gptWs to socket so cron scheduler can access it mid-session
+    socket.data = socket.data || {};
+    socket.data.gptWs = gptWs;
   } catch (err) {
     logger.error(`❌ [${userId}] Initialization failed:`, err);
     socket.emit("ai-error", {
@@ -132,6 +142,12 @@ export async function handleRealtimeAI(socket, token) {
     ) {
       const userTranscript = event.transcript;
       markUserAudio(userId);
+
+      userMessageCount++;
+      if (userMessageCount === REMINDER_TRIGGER_AFTER_MESSAGES) {
+        deliverRemindersOnSessionStart(token, socket, gptWs);
+        console.log("Reminder triggered!!!!");
+      }
 
       const s = sessions.get(userId);
       if (s) {
@@ -234,6 +250,40 @@ export async function handleRealtimeAI(socket, token) {
       currentResponseId = null;
       textChunkCount = 0;
     }
+
+    if (event.type === "response.function_call_arguments.done") {
+      if (event.name === "acknowledge_reminder") {
+        try {
+          const args = JSON.parse(event.arguments);
+          const reminderId = Number(args.reminder_id);
+          const sessionId = socket.id;
+
+          await handleReminderAcknowledgement(reminderId, sessionId);
+
+          // Tell GPT the function call is complete so it continues response
+          gptWs.send(
+            JSON.stringify({
+              type: "conversation.item.create",
+              item: {
+                type: "function_call_output",
+                call_id: event.call_id,
+                output: JSON.stringify({ success: true }),
+              },
+            }),
+          );
+
+          // Trigger GPT to continue speaking naturally after acknowledgement
+          gptWs.send(
+            JSON.stringify({
+              type: "response.create",
+              response: { output_modalities: ["text"] },
+            }),
+          );
+        } catch (err) {
+          logger.error("❌ Reminder acknowledgement failed:", err.message);
+        }
+      }
+    }
   });
 
   // 🎤 User audio chunk from frontend
@@ -301,7 +351,7 @@ export async function handleRealtimeAI(socket, token) {
 
     try {
       // Flush conversation to memory
-      await flushConversationToMemory(token);
+      await flushConversationToMemory(token, safeTimeZone);
       logger.info(`✅ [${userId}] Memory flushed`);
     } catch (err) {
       logger.error(`❌ [${userId}] Memory flush failed:`, err);

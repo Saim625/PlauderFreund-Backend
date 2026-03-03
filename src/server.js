@@ -19,6 +19,10 @@ import { personalityActionRouter } from "./routes/adminDashboardRoutes/personali
 import { adminPasswordRouter } from "./routes/adminPasswordRecovery/passwordRecovery.js";
 import { startReengagementLoop } from "./services/reengagementEngine.js";
 import { cleanupAllConnections } from "./services/elevenlabWS.js";
+import {
+  startReminderCleanup,
+  startReminderScheduler,
+} from "./services/reminderScheduler.js";
 
 const app = express();
 
@@ -67,6 +71,9 @@ startReengagementLoop((socketId) => {
   }
   socket.emit("reengagement-needed");
 });
+
+startReminderScheduler();
+startReminderCleanup();
 
 io.on("connection", (socket) => {
   logger.info(`🟢 Client connected: ${socket.id}`);
