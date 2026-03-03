@@ -38,7 +38,7 @@ actionRouter.put(
         where: { id: userTokenId },
         data: { isActive: !userRecord.isActive },
       });
-      
+
       userRecord.isActive = updated.isActive;
 
       return res.json({
@@ -55,7 +55,7 @@ actionRouter.put(
         message: "Server error",
       });
     }
-  }
+  },
 );
 
 // Delete user token
@@ -89,8 +89,11 @@ actionRouter.delete(
       // Delete related data
       await Promise.all([
         prisma.memorySummary.deleteMany({ where: { token: userRecord.token } }),
-        prisma.personalityConfig.deleteMany({ where: { userToken: userRecord.token } }),
+        prisma.personalityConfig.deleteMany({
+          where: { userToken: userRecord.token },
+        }),
         prisma.conversation.deleteMany({ where: { token: userRecord.token } }),
+        prisma.reminder.deleteMany({ where: { userToken: userRecord.token } }),
       ]);
 
       // Delete user token
@@ -110,7 +113,7 @@ actionRouter.delete(
         message: "Server error",
       });
     }
-  }
+  },
 );
 
 // Generate 6-7 char alphanumeric token
@@ -154,7 +157,7 @@ actionRouter.post(
         message: "Server error while generating token",
       });
     }
-  }
+  },
 );
 
 actionRouter.get(
@@ -190,5 +193,5 @@ actionRouter.get(
         message: "Internal Server Error",
       });
     }
-  }
+  },
 );
