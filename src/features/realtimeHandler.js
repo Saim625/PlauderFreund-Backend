@@ -20,6 +20,7 @@ import { flushConversationToMemory } from "../services/flushConversationToMemory
 import { getVoiceConfigForToken } from "../utils/getVoiceConfigForToken.js";
 import { deliverRemindersOnSessionStart } from "../services/reminderScheduler.js"; // 👈 NEW
 import { handleReminderAcknowledgement } from "../services/reminderAcknowledgementHandler.js";
+import { handleToolCall } from "../utils/toolHandlers.js";
 
 export async function handleRealtimeAI(socket, token, timezone) {
   let gptWs;
@@ -252,36 +253,10 @@ export async function handleRealtimeAI(socket, token, timezone) {
     }
 
     if (event.type === "response.function_call_arguments.done") {
-      if (event.name === "acknowledge_reminder") {
-        try {
-          const args = JSON.parse(event.arguments);
-          const reminderId = Number(args.reminder_id);
-          const sessionId = socket.id;
-
-          await handleReminderAcknowledgement(reminderId, sessionId);
-
-          // Tell GPT the function call is complete so it continues response
-          gptWs.send(
-            JSON.stringify({
-              type: "conversation.item.create",
-              item: {
-                type: "function_call_output",
-                call_id: event.call_id,
-                output: JSON.stringify({ success: true }),
-              },
-            }),
-          );
-
-          // Trigger GPT to continue speaking naturally after acknowledgement
-          gptWs.send(
-            JSON.stringify({
-              type: "response.create",
-              response: { output_modalities: ["text"] },
-            }),
-          );
-        } catch (err) {
-          logger.error("❌ Reminder acknowledgement failed:", err.message);
-        }
+      try {
+        await handleToolCall(event, socket.id, token, gptWs);
+      } catch (err) {
+        logger.error("❌ Tool call failed:", err.message);
       }
     }
   });
