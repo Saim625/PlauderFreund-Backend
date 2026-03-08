@@ -97,6 +97,11 @@ ${personalityInstructions}
       headers: { Authorization: `Bearer ${OPENAI_API_KEY}` },
     });
 
+    ws.once("error", (err) => {
+      logger.error("❌ GPT WS connection failed:", err);
+      reject(err);
+    });
+
     let modelReady = false;
 
     ws.on("open", () => {
@@ -171,6 +176,7 @@ ${personalityInstructions}
       /* ---- Model is ready ---- */
       if (data.type === "session.created") {
         modelReady = true;
+        ws.removeAllListeners("error");
 
         /* Inject greeting safely (hidden) */
         if (greetingText) {
@@ -224,15 +230,6 @@ ${personalityInstructions}
       res.on("end", () => {
         logger.error(`Response Body: ${body}`);
       });
-    });
-
-    ws.on("error", (err) => {
-      logger.error("❌ GPT WS Error:", err);
-      reject(err);
-    });
-
-    ws.on("close", () => {
-      logger.info("⚠️ GPT Realtime WebSocket closed.");
     });
   });
 }

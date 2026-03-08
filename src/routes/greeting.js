@@ -7,6 +7,8 @@ import { getVoiceConfigForToken } from "../utils/getVoiceConfigForToken.js";
 
 export const greetingRouter = express.Router();
 
+const MAX_GREETING_HISTORY = 3;
+
 greetingRouter.post("/generate-greeting", async (req, res) => {
   try {
     const { token } = req.body;
@@ -24,25 +26,32 @@ greetingRouter.post("/generate-greeting", async (req, res) => {
       ? rawSummary.map((i) => `${i.key}: ${i.value}`).join(", ")
       : "No biography yet";
 
-    // ✅ Fetch personality / voice config here
+    // ✅ Fetch last 3 greetings to avoid repetition
+    const previousGreetings = await prisma.greetingHistory.findMany({
+      where: { userToken: token },
+      orderBy: { createdAt: "desc" },
+      take: MAX_GREETING_HISTORY,
+    });
+
+    const previousGreetingsText = previousGreetings.length
+      ? previousGreetings.map((g, i) => `${i + 1}. "${g.text}"`).join("\n")
+      : "None yet";
+
     const voiceConfig = await getVoiceConfigForToken(token);
 
     const prompt = [
       {
         role: "system",
         content: `You are a warm, friendly AI assistant who speaks directly to the user like a real human in German.
-        Your job is to create a completely unique greeting every time — never generic, never robotic.
-        Use the user's personality and biography, extract their name if present, and make the greeting personal.
-        Keep it 1–2 short conversational sentences.`,
+Your job is to create a completely unique greeting every time — never generic, never robotic.
+Use the user's biography to make it personal — mention their name if known, reference something relevant from their life.
+Keep it 1–2 short conversational sentences.
+IMPORTANT: The greetings below have already been used recently. Do NOT repeat or closely resemble any of them:
+${previousGreetingsText}`,
       },
       {
         role: "user",
-        content: `
-        User Biography:
-        ${biographyText || "No biography yet"}
-
-        Create the greeting now.
-        `,
+        content: `User Biography:\n${biographyText}\n\nCreate a fresh, personal greeting now.`,
       },
     ];
 
@@ -50,7 +59,39 @@ greetingRouter.post("/generate-greeting", async (req, res) => {
 
     greetingStore.set(token, greetingText);
 
-    // ✅ SAME config used for greeting audio
+    try {
+      const userExists = await prisma.userAccessToken.findUnique({
+        where: { token },
+      });
+
+      if (userExists) {
+        await prisma.greetingHistory.create({
+          data: { userToken: token, text: greetingText },
+        });
+
+        const allGreetings = await prisma.greetingHistory.findMany({
+          where: { userToken: token },
+          orderBy: { createdAt: "desc" },
+        });
+
+        if (allGreetings.length > MAX_GREETING_HISTORY) {
+          const toDelete = allGreetings.slice(MAX_GREETING_HISTORY);
+          await prisma.greetingHistory.deleteMany({
+            where: { id: { in: toDelete.map((g) => g.id) } },
+          });
+        }
+      } else {
+        console.warn(
+          `⚠️ Token not found in UserAccessToken — skipping greeting history save`,
+        );
+      }
+    } catch (historyErr) {
+      console.error(
+        "⚠️ Failed to save greeting history (non-fatal):",
+        historyErr.message,
+      );
+    }
+
     const audioBuffer = await generateGreetingAudio(greetingText, voiceConfig);
 
     res.status(200).json({

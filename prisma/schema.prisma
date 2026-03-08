@@ -15,6 +15,7 @@ model UserAccessToken {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   reminders Reminder[]
+  greetingHistory GreetingHistory[]
 }
 
 model AdminAccessToken {
@@ -151,4 +152,15 @@ model ReminderDeliveryLog {
   acknowledgedAt   DateTime? @map("acknowledged_at") @db.Timestamptz
 
   @@map("reminder_delivery_log")
+}
+
+model GreetingHistory {
+  id        Int      @id @default(autoincrement())
+  userToken String   @map("user_token")
+  text      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user UserAccessToken @relation(fields: [userToken], references: [token])
+
+  @@map("greeting_history")
 }

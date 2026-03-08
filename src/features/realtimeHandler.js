@@ -32,6 +32,9 @@ export async function handleRealtimeAI(socket, token, timezone) {
   let userMessageCount = 0;
   const REMINDER_TRIGGER_AFTER_MESSAGES = 3;
 
+  let gptReconnectAttempts = 0;
+  const GPT_MAX_RECONNECT = 5;
+
   const safeTimeZone = timezone && timezone !== undefined ? timezone : "UTC";
 
   const userId = socket.id; // Use socket.id as unique user identifier
@@ -62,6 +65,53 @@ export async function handleRealtimeAI(socket, token, timezone) {
     // ✅ NEW: Attach gptWs to socket so cron scheduler can access it mid-session
     socket.data = socket.data || {};
     socket.data.gptWs = gptWs;
+
+    attachGPTListeners();
+
+    async function reconnectGPT() {
+      if (gptReconnectAttempts >= GPT_MAX_RECONNECT) {
+        logger.error(`❌ [${userId}] GPT max reconnect attempts reached`);
+        socket.emit("ai-error", {
+          message: "AI connection lost. Please refresh.",
+        });
+        return;
+      }
+
+      gptReconnectAttempts++;
+      const delay = Math.min(
+        1000 * Math.pow(2, gptReconnectAttempts - 1),
+        10000,
+      );
+      logger.info(
+        `🔄 [${userId}] GPT reconnecting in ${delay}ms (attempt ${gptReconnectAttempts}/${GPT_MAX_RECONNECT})`,
+      );
+
+      await new Promise((res) => setTimeout(res, delay));
+
+      try {
+        // Reconnect GPT with same memory/config
+        const memory = await prisma.memorySummary.findUnique({
+          where: { token },
+          include: { summary: true },
+        });
+        const summary = memory?.summary || [];
+
+        gptWs = await connectToRealtimeAPI(summary, token, safeTimeZone);
+
+        // Re-attach gptWs to socket for cron scheduler
+        socket.data = socket.data || {};
+        socket.data.gptWs = gptWs;
+
+        gptReconnectAttempts = 0; // reset on success
+        logger.info(`✅ [${userId}] GPT reconnected successfully`);
+
+        // Re-attach all gptWs listeners by calling attachGPTListeners (see note below)
+        attachGPTListeners();
+      } catch (err) {
+        logger.error(`❌ [${userId}] GPT reconnect failed:`, err.message);
+        reconnectGPT(); // retry
+      }
+    }
   } catch (err) {
     logger.error(`❌ [${userId}] Initialization failed:`, err);
     socket.emit("ai-error", {
@@ -100,166 +150,197 @@ export async function handleRealtimeAI(socket, token, timezone) {
     );
   });
 
-  gptWs.on("message", async (msg) => {
-    const event = JSON.parse(msg.toString());
+  function attachGPTListeners() {
+    gptWs.on("message", async (msg) => {
+      const event = JSON.parse(msg.toString());
 
-    // 🎤 User started speaking - interrupt AI
-    if (event.type === "input_audio_buffer.speech_started") {
-      const connection = getConnectionForUser(userId);
+      // 🎤 User started speaking - interrupt AI
+      if (event.type === "input_audio_buffer.speech_started") {
+        const connection = getConnectionForUser(userId);
 
-      // 🔥 CRITICAL: Mark user activity IMMEDIATELY to prevent re-engagement
-      markUserSpeaking(userId, true);
-      logger.info(`🎤 [${userId}] User started speaking - activity updated`);
+        // 🔥 CRITICAL: Mark user activity IMMEDIATELY to prevent re-engagement
+        markUserSpeaking(userId, true);
+        logger.info(`🎤 [${userId}] User started speaking - activity updated`);
 
-      if (connection && connection.contextId) {
-        logger.info(`🛑 [${userId}] User interrupted - canceling AI response`);
+        if (connection && connection.contextId) {
+          logger.info(
+            `🛑 [${userId}] User interrupted - canceling AI response`,
+          );
 
-        // Notify frontend
-        socket.emit("ai-interrupt");
+          // Notify frontend
+          socket.emit("ai-interrupt");
 
-        // Cancel GPT response
-        if (currentResponseId) {
-          gptWs.send(JSON.stringify({ type: "response.cancel" }));
+          // Cancel GPT response
+          if (currentResponseId) {
+            gptWs.send(JSON.stringify({ type: "response.cancel" }));
+          }
+
+          // Close ElevenLabs context
+          connection.closeContext();
+
+          // Reset state
+          currentResponseId = null;
+          textChunkCount = 0;
+        }
+      }
+
+      // 🛑 User stopped speaking
+      if (event.type === "input_audio_buffer.speech_stopped") {
+        markUserSpeaking(userId, false);
+        logger.info(`🛑 [${userId}] User stopped speaking`);
+      }
+
+      // 📝 User speech transcription completed
+      if (
+        event.type === "conversation.item.input_audio_transcription.completed"
+      ) {
+        const userTranscript = event.transcript;
+        markUserAudio(userId);
+
+        userMessageCount++;
+        if (userMessageCount === REMINDER_TRIGGER_AFTER_MESSAGES) {
+          deliverRemindersOnSessionStart(token, socket, gptWs);
+          console.log("Reminder triggered!!!!");
         }
 
-        // Close ElevenLabs context
-        connection.closeContext();
+        const s = sessions.get(userId);
+        if (s) {
+          s.cooldownUntil = 0;
+        }
 
-        // Reset state
+        await ingestConversationMessage({
+          token: token,
+          role: "user",
+          text: userTranscript,
+        });
+      }
+
+      // 🤖 AI response started
+      if (event.type === "response.created") {
+        currentResponseId = event.response?.id;
+        textChunkCount = 0;
+
+        const connection = getConnectionForUser(userId);
+
+        if (!connection) {
+          logger.error(`❌ [${userId}] No ElevenLabs connection found`);
+          socket.emit("ai-error", { message: "Audio service disconnected" });
+          return;
+        }
+
+        // 🔥 FIX: Only close old context if it's different from current
+        const oldContextId = connection.contextId;
+
+        if (oldContextId) {
+          logger.info(
+            `🔄 [${userId}] Closing old context ${oldContextId} before starting new one`,
+          );
+          connection.closeContext();
+        }
+        // Start new context
+        const newContextId = connection.startContext(voiceConfig);
+
+        if (!newContextId) {
+          logger.error(`❌ [${userId}] Failed to start audio context`);
+          socket.emit("ai-error", { message: "Failed to start audio stream" });
+        }
+      }
+
+      // 📤 AI text chunk received
+      if (event.type === "response.output_text.delta") {
+        const textChunk = event.delta;
+        textChunkCount++;
+
+        const connection = getConnectionForUser(userId);
+
+        if (!connection) {
+          logger.error(
+            `❌ [${userId}] No connection for text chunk #${textChunkCount}`,
+          );
+          return;
+        }
+
+        if (!connection.contextId) {
+          logger.error(`❌Cannot send text - no active context`);
+
+          return;
+        }
+
+        const sendResult = connection.sendText(textChunk);
+
+        if (!sendResult) {
+          logger.error(
+            `❌ [${userId}] Failed to send text chunk #${textChunkCount}`,
+          );
+        }
+      }
+
+      // ✅ AI text generation complete
+      if (event.type === "response.output_text.done") {
+        const fullAiResponse = event.text;
+
+        await ingestConversationMessage({
+          token,
+          role: "ai",
+          text: fullAiResponse,
+        });
+
+        const connection = getConnectionForUser(userId);
+
+        if (connection && connection.contextId) {
+          // Flush remaining audio
+          connection.sendText("", { flush: true });
+        }
+      }
+
+      // ✅ AI response done
+      if (event.type === "response.done") {
+        socket.emit("ai-response-done", { response: event.response });
+        currentResponseId = null;
+      }
+
+      // ❌ AI response cancelled
+      if (event.type === "response.cancelled") {
         currentResponseId = null;
         textChunkCount = 0;
       }
-    }
 
-    // 🛑 User stopped speaking
-    if (event.type === "input_audio_buffer.speech_stopped") {
-      markUserSpeaking(userId, false);
-      logger.info(`🛑 [${userId}] User stopped speaking`);
-    }
-
-    // 📝 User speech transcription completed
-    if (
-      event.type === "conversation.item.input_audio_transcription.completed"
-    ) {
-      const userTranscript = event.transcript;
-      markUserAudio(userId);
-
-      userMessageCount++;
-      if (userMessageCount === REMINDER_TRIGGER_AFTER_MESSAGES) {
-        deliverRemindersOnSessionStart(token, socket, gptWs);
-        console.log("Reminder triggered!!!!");
+      if (event.type === "response.function_call_arguments.done") {
+        try {
+          await handleToolCall(event, socket.id, token, gptWs);
+        } catch (err) {
+          logger.error("❌ Tool call failed:", err.message);
+        }
       }
+    });
 
-      const s = sessions.get(userId);
-      if (s) {
-        s.cooldownUntil = 0;
-      }
+    gptWs.on("close", (code, reason) => {
+      logger.warn(
+        `⚠️ [${userId}] GPT WebSocket closed. Code: ${code}, Reason: ${reason}`,
+      );
 
-      await ingestConversationMessage({
-        token: token,
-        role: "user",
-        text: userTranscript,
-      });
-    }
-
-    // 🤖 AI response started
-    if (event.type === "response.created") {
-      currentResponseId = event.response?.id;
-      textChunkCount = 0;
-
-      const connection = getConnectionForUser(userId);
-
-      if (!connection) {
-        logger.error(`❌ [${userId}] No ElevenLabs connection found`);
-        socket.emit("ai-error", { message: "Audio service disconnected" });
-        return;
-      }
-
-      // 🔥 FIX: Only close old context if it's different from current
-      const oldContextId = connection.contextId;
-
-      if (oldContextId) {
+      // Don't reconnect if socket session is already gone
+      if (!socket.connected) {
         logger.info(
-          `🔄 [${userId}] Closing old context ${oldContextId} before starting new one`,
-        );
-        connection.closeContext();
-      }
-      // Start new context
-      const newContextId = connection.startContext(voiceConfig);
-
-      if (!newContextId) {
-        logger.error(`❌ [${userId}] Failed to start audio context`);
-        socket.emit("ai-error", { message: "Failed to start audio stream" });
-      }
-    }
-
-    // 📤 AI text chunk received
-    if (event.type === "response.output_text.delta") {
-      const textChunk = event.delta;
-      textChunkCount++;
-
-      const connection = getConnectionForUser(userId);
-
-      if (!connection) {
-        logger.error(
-          `❌ [${userId}] No connection for text chunk #${textChunkCount}`,
+          `ℹ️ [${userId}] Socket also disconnected — skipping GPT reconnect`,
         );
         return;
       }
 
-      if (!connection.contextId) {
-        logger.error(`❌Cannot send text - no active context`);
-
+      // Don't reconnect on intentional close (1000 = normal closure)
+      if (code === 1000) {
+        logger.info(`ℹ️ [${userId}] GPT closed normally — no reconnect`);
         return;
       }
 
-      const sendResult = connection.sendText(textChunk);
+      reconnectGPT();
+    });
 
-      if (!sendResult) {
-        logger.error(
-          `❌ [${userId}] Failed to send text chunk #${textChunkCount}`,
-        );
-      }
-    }
-
-    // ✅ AI text generation complete
-    if (event.type === "response.output_text.done") {
-      const fullAiResponse = event.text;
-
-      await ingestConversationMessage({
-        token,
-        role: "ai",
-        text: fullAiResponse,
-      });
-
-      const connection = getConnectionForUser(userId);
-
-      if (connection && connection.contextId) {
-        // Flush remaining audio
-        connection.sendText("", { flush: true });
-      }
-    }
-
-    // ✅ AI response done
-    if (event.type === "response.done") {
-      socket.emit("ai-response-done", { response: event.response });
-      currentResponseId = null;
-    }
-
-    // ❌ AI response cancelled
-    if (event.type === "response.cancelled") {
-      currentResponseId = null;
-      textChunkCount = 0;
-    }
-
-    if (event.type === "response.function_call_arguments.done") {
-      try {
-        await handleToolCall(event, socket.id, token, gptWs);
-      } catch (err) {
-        logger.error("❌ Tool call failed:", err.message);
-      }
-    }
-  });
+    gptWs.on("error", (err) => {
+      logger.error(`❌ [${userId}] GPT WebSocket error:`, err.message);
+      // close event will fire after error — reconnect handled there
+    });
+  }
 
   // 🎤 User audio chunk from frontend
   socket.on("audio-chunk", (chunkArrayBuffer) => {
