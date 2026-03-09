@@ -262,7 +262,7 @@ adminActionRouter.post(
 
       // Validation: Check if number is 11 or 12 digits
       const numberStr = String(number).trim();
-      if (!/^\d{10,15}$/.test(numberStr)) {
+      if (!/^[^<>]{0,15}$/.test(numberStr)) {
         return res.status(400).json({
           success: false,
           message: "Number must be between 10 to 15 digits",
@@ -365,10 +365,10 @@ adminActionRouter.put(
 
       // Validation: Check if number is 11 or 12 digits
       const numberStr = String(number).trim();
-      if (!/^\d{11,12}$/.test(numberStr)) {
+      if (!/^[^<>]{0,15}$/.test(numberStr)) {
         return res.status(400).json({
           success: false,
-          message: "Number must be 11 or 12 digits",
+          message: "Number must be 0 to 15 digits",
         });
       }
 
