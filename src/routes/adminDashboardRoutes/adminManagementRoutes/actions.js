@@ -252,14 +252,6 @@ adminActionRouter.post(
 
       const { number } = req.body;
 
-      // Validation: Check if number is provided
-      if (!number) {
-        return res.status(400).json({
-          success: false,
-          message: "Number is required",
-        });
-      }
-
       // Validation: Check if number is 11 or 12 digits
       const numberStr = String(number).trim();
       if (!/^[^<>]{0,15}$/.test(numberStr)) {
@@ -354,14 +346,6 @@ adminActionRouter.put(
       }
 
       const { number } = req.body;
-
-      // Validation: Check if number is provided
-      if (!number) {
-        return res.status(400).json({
-          success: false,
-          message: "Number is required",
-        });
-      }
 
       // Validation: Check if number is 11 or 12 digits
       const numberStr = String(number).trim();
