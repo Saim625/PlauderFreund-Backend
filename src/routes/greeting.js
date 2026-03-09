@@ -45,7 +45,7 @@ greetingRouter.post("/generate-greeting", async (req, res) => {
         content: `You are a warm, friendly AI assistant who speaks directly to the user like a real human in German.
 Your job is to create a completely unique greeting every time — never generic, never robotic.
 Use the user's biography to make it personal — mention their name if known, reference something relevant from their life.
-Keep it 1–2 short conversational sentences.
+Keep it 1 short conversational sentences.
 IMPORTANT: The greetings below have already been used recently. Do NOT repeat or closely resemble any of them:
 ${previousGreetingsText}`,
       },
