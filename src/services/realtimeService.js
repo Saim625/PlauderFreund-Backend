@@ -158,6 +158,17 @@ ${personalityInstructions}
                   required: ["new_preference"],
                 },
               },
+              {
+                type: "function",
+                name: "get_current_time",
+                description:
+                  "Call this when the user asks for the current time, date, or day. Returns the exact current local time for the user.",
+                parameters: {
+                  type: "object",
+                  properties: {},
+                  required: [],
+                },
+              },
             ],
             tool_choice: "auto",
           },

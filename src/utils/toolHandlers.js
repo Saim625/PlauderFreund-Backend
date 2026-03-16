@@ -2,17 +2,18 @@ import prisma from "../lib/db.js";
 import { handleReminderAcknowledgement } from "../services/reminderAcknowledgementHandler.js";
 import logger from "./logger.js";
 
-function sendToolResult(gptWs, callId) {
+function sendToolResult(gptWs, callId, success = true, data = {}) {
   gptWs.send(
     JSON.stringify({
       type: "conversation.item.create",
       item: {
         type: "function_call_output",
         call_id: callId,
-        output: JSON.stringify({ success: true }),
+        output: JSON.stringify({ success, ...data }),
       },
     }),
   );
+
   gptWs.send(
     JSON.stringify({
       type: "response.create",
@@ -25,7 +26,7 @@ async function handleAcknowledgeReminder(args, callId, sessionId, gptWs) {
   const reminderId = Number(args.reminder_id);
   await handleReminderAcknowledgement(reminderId, sessionId);
   sendToolResult(gptWs, callId);
-  logger.info(`✅ Tool: acknowledge_reminder — id ${reminderId}`);
+  logger.info(`✅ Reminder ${reminderId} acknowledged`);
 }
 
 async function handleUpdatePersonalityPreference(args, callId, token, gptWs) {
@@ -33,9 +34,9 @@ async function handleUpdatePersonalityPreference(args, callId, token, gptWs) {
 
   if (!newPreference) {
     logger.warn(
-      "⚠️ Tool: update_personality_preferences — empty preference, skipping",
+      "⚠️ update_personality_preferences called with empty preference",
     );
-    sendToolResult(gptWs, callId);
+    sendToolResult(gptWs, callId, false);
     return;
   }
 
@@ -44,10 +45,8 @@ async function handleUpdatePersonalityPreference(args, callId, token, gptWs) {
   });
 
   if (!config) {
-    logger.warn(
-      `⚠️ Tool: update_personality_preferences — no config found for token ${token}`,
-    );
-    sendToolResult(gptWs, callId);
+    logger.warn(`⚠️ No PersonalityConfig found for token ${token}`);
+    sendToolResult(gptWs, callId, false);
     return;
   }
 
@@ -55,9 +54,7 @@ async function handleUpdatePersonalityPreference(args, callId, token, gptWs) {
 
   // Avoid exact duplicates
   if (existing.includes(newPreference)) {
-    logger.info(
-      `ℹ️ Tool: update_personality_preferences — already exists, skipping`,
-    );
+    logger.info(`ℹ️ Preference already exists, skipping: "${newPreference}"`);
     sendToolResult(gptWs, callId);
     return;
   }
@@ -70,13 +67,35 @@ async function handleUpdatePersonalityPreference(args, callId, token, gptWs) {
     },
   });
 
-  logger.info(
-    `✅ Tool: update_personality_preferences — saved: "${newPreference}"`,
-  );
+  logger.info(`✅ Preference saved for ${token}: "${newPreference}"`);
   sendToolResult(gptWs, callId);
 }
 
-export async function handleToolCall(event, sessionId, token, gptWs) {
+function handleGetCurrentTime(callId, timezone, gptWs) {
+  const now = new Date();
+  const safeTimezone = timezone || "UTC";
+
+  sendToolResult(gptWs, callId, true, {
+    utc: now.toISOString(),
+    timezone: safeTimezone,
+    localTime: now.toLocaleString("de-DE", {
+      timeZone: safeTimezone,
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }),
+  });
+
+  logger.info(
+    `🕐 Time requested — timezone: ${safeTimezone}, time: ${now.toISOString()}`,
+  );
+}
+
+export async function handleToolCall(event, sessionId, token, gptWs, timezone) {
   const { name, call_id, arguments: rawArgs } = event;
 
   let args;
@@ -84,21 +103,26 @@ export async function handleToolCall(event, sessionId, token, gptWs) {
     args = JSON.parse(rawArgs);
   } catch (err) {
     logger.error(
-      `❌ Tool: failed to parse arguments for "${name}":`,
+      `❌ Failed to parse tool arguments for "${name}":`,
       err.message,
     );
     return;
   }
 
-  try {
-    if (name === "acknowledge_reminder") {
+  switch (name) {
+    case "acknowledge_reminder":
       await handleAcknowledgeReminder(args, call_id, sessionId, gptWs);
-    } else if (name === "update_personality_preferences") {
+      break;
+
+    case "update_personality_preferences":
       await handleUpdatePersonalityPreference(args, call_id, token, gptWs);
-    } else {
-      logger.warn(`⚠️ Tool: unknown tool called — "${name}"`);
-    }
-  } catch (err) {
-    logger.error(`❌ Tool "${name}" failed:`, err.message);
+      break;
+
+    case "get_current_time":
+      handleGetCurrentTime(call_id, timezone, gptWs);
+      break;
+
+    default:
+      logger.warn(`⚠️ Unknown tool called: "${name}"`);
   }
 }
