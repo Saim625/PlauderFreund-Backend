@@ -3,6 +3,7 @@ import prisma from "../lib/db.js";
 import { getAllSessions } from "./sessionStore.js";
 import { injectReminderIntoGPT } from "./reminderInjector.js";
 import logger from "../utils/logger.js";
+import { reschedule } from "../utils/rescheduleReminder.js";
 
 // ---------------------------------------------------------------------------
 // Core query — find all reminders that are due RIGHT NOW
@@ -168,18 +169,43 @@ export function startReminderScheduler() {
 
 export function startReminderCleanup() {
   cron.schedule("0 0 * * *", async () => {
-    logger.info("🧹 Running daily reminder cleanup...");
-
     const now = new Date();
 
-    const result = await prisma.reminder.updateMany({
+    // One-time reminders whose window passed → expire them
+    await prisma.reminder.updateMany({
       where: {
         status: "active",
+        recurrence: "none",
         remindUntil: { lt: now },
       },
       data: { status: "expired" },
     });
 
-    logger.info(`🧹 Expired ${result.count} reminder(s)`);
+    // Recurring reminders whose window passed but NOT acknowledged → reschedule
+    const missedRecurring = await prisma.reminder.findMany({
+      where: {
+        status: "active",
+        recurrence: { not: "none" },
+        remindUntil: { lt: now },
+      },
+    });
+
+    for (const reminder of missedRecurring) {
+      const next = reschedule(reminder); // same function from reminderAcknowledgementHandler
+      if (next) {
+        await prisma.reminder.update({
+          where: { id: reminder.id },
+          data: {
+            eventDatetime: next.newEventDatetime,
+            remindFrom: next.newRemindFrom,
+            remindUntil: next.newRemindUntil,
+            updatedAt: new Date(),
+          },
+        });
+        logger.info(
+          `🔄 Missed recurring reminder "${reminder.title}" auto-rescheduled`,
+        );
+      }
+    }
   });
 }

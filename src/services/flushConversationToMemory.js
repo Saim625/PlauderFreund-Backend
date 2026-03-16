@@ -95,9 +95,17 @@ All datetime fields must be ISO 8601 with correct offset for "${safeTimezone}". 
 
 ### remind_from / remind_until guidelines:
 - medication  → remind_from: 60 min before event_datetime, remind_until: 180 min after
-- appointment → remind_from: 24 hours before event_datetime, remind_until: event_datetime
+- appointment → remind_from: 24 hours before event_datetime, remind_until: end of event day
 - birthday    → remind_from: 48 hours before event_datetime, remind_until: end of event day
 - general     → remind_from: now, remind_until: null
+
+### Recurrence rules (apply these defaults per category):
+- medication  → "daily" by default unless user says otherwise
+- appointment → "none" unless user says it repeats
+- birthday    → "yearly" always
+- general     → "none" unless user says it repeats
+
+### recurrence values: "none" | "daily" | "weekly" | "yearly"
 
 ### Reminders output format (array of objects):
 - "title": short clear title
