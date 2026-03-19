@@ -23,10 +23,6 @@ async function getDueReminders(userToken = null) {
         {
           OR: [{ remindUntil: { gte: now } }, { remindUntil: null }],
         },
-        // Event must not have already passed
-        {
-          OR: [{ eventDatetime: { gte: now } }, { eventDatetime: null }],
-        },
       ],
     },
   });

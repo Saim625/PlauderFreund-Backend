@@ -94,7 +94,7 @@ All datetime fields must be ISO 8601 with correct offset for "${safeTimezone}". 
 - If a field cannot be determined, use null.
 
 ### remind_from / remind_until guidelines:
-- medication  → remind_from: 60 min before event_datetime, remind_until: 180 min after
+- medication  → remind_from: 60 min before event_datetime, remind_until: 720 min after
 - appointment → remind_from: 24 hours before event_datetime, remind_until: end of event day
 - birthday    → remind_from: 48 hours before event_datetime, remind_until: end of event day
 - general     → remind_from: now, remind_until: null

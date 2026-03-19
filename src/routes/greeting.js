@@ -42,16 +42,26 @@ greetingRouter.post("/generate-greeting", async (req, res) => {
     const prompt = [
       {
         role: "system",
-        content: `You are a warm, friendly AI assistant who speaks directly to the user like a real human in German.
-Your job is to create a completely unique greeting every time — never generic, never robotic.
-Use the user's biography to make it personal — mention their name if known, reference something relevant from their life.
-Keep it 1 short conversational sentences.
-IMPORTANT: The greetings below have already been used recently. Do NOT repeat or closely resemble any of them:
+        content: `You are a warm, friendly AI assistant speaking to the user in German.
+Generate a single short greeting sentence — maximum 15 words.
+Every greeting must feel genuinely different in structure and opening — not just different words for the same idea.
+
+Vary the opening style each time. Examples of different styles, these styles are just for example:
+- Ask something personal: "Wie war dein gestrige Spaziergang, [Name]?"
+- Make an observation: "Schön, dass du wieder da bist!"
+- Reference something from their life: "Hast du heute schon deine Medizin genommen?"
+- Be playful: "Na, wer kommt denn da wieder vorbei?"
+- Be warm and simple: "Hallo [Name], ich hab auf dich gewartet."
+
+Use the user's biography to pick the most relevant style for today.
+STRICT RULE: Do NOT use the same opening word or sentence structure as any previous greeting listed below.
+
+Previous greetings (forbidden to resemble):
 ${previousGreetingsText}`,
       },
       {
         role: "user",
-        content: `User Biography:\n${biographyText}\n\nCreate a fresh, personal greeting now.`,
+        content: `User Biography:\n${biographyText}\n\nGenerate one greeting now. Maximum 15 words. Must feel completely different from the previous ones.`,
       },
     ];
 
