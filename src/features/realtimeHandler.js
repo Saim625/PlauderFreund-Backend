@@ -19,7 +19,6 @@ import { ingestConversationMessage } from "../utils/ingestConversationMessage.js
 import { flushConversationToMemory } from "../services/flushConversationToMemory.js";
 import { getVoiceConfigForToken } from "../utils/getVoiceConfigForToken.js";
 import { deliverRemindersOnSessionStart } from "../services/reminderScheduler.js"; // 👈 NEW
-import { handleReminderAcknowledgement } from "../services/reminderAcknowledgementHandler.js";
 import { handleToolCall } from "../utils/toolHandlers.js";
 
 export async function handleRealtimeAI(socket, token, timezone) {
@@ -309,7 +308,7 @@ export async function handleRealtimeAI(socket, token, timezone) {
         try {
           await handleToolCall(event, socket.id, token, gptWs, safeTimeZone);
         } catch (err) {
-          logger.error("❌ Tool call failed:", err.message);
+          logger.error("❌ Tool call failed:", err);
         }
       }
     });

@@ -6,18 +6,24 @@ export const memoryRouter = express.Router();
 
 // ✅ Get memory summary
 memoryRouter.get("/", async (req, res) => {
-  const { token } = req.query;
-  if (!token)
-    return res.status(400).json({ success: false, message: "Token required" });
+  try {
+    const { token } = req.query;
+    if (!token)
+      return res
+        .status(400)
+        .json({ success: false, message: "Token required" });
 
-  const memory = await prisma.memorySummary.findUnique({
-    where: { token },
-    include: { summary: true },
-  });
-  
-  if (!memory) return res.json({ success: true, data: [] });
+    const memory = await prisma.memorySummary.findUnique({
+      where: { token },
+      include: { summary: true },
+    });
 
-  res.json({ success: true, data: memory.summary });
+    if (!memory) return res.json({ success: true, data: [] });
+
+    res.json({ success: true, data: memory.summary });
+  } catch (err) {
+    console.log("Error in Memory Router: ", err.message);
+  }
 });
 
 // ✅ Update memory summary
@@ -32,6 +38,7 @@ memoryRouter.post("/update", async (req, res) => {
     await updateMemorySummary(token, newInsights);
     res.json({ success: true, message: "Memory updated" });
   } catch (error) {
+    console.log("Error in Memory Router: ", err.message);
     res.status(500).json({ success: false, message: error.message });
   }
 });

@@ -65,7 +65,7 @@ export async function connectToRealtimeAPI(summary = [], token, timezone) {
      ONLY BEHAVIOR GOES HERE
   ------------------------- */
   const baseInstructions = `
-You are a warm, friendly AI assistant who speaks directly to elderly users in German.
+You are a warm, friendly AI assistant who speaks directly to elderly users in German or prefered language present in user memory.
 Speak clearly and kindly. Avoid complex or technical language.
 If the user sounds confused, gently clarify what they might mean.
 
@@ -127,8 +127,12 @@ ${personalityInstructions}
               {
                 type: "function",
                 name: "acknowledge_reminder",
-                description:
-                  "Call this when the user confirms they have completed, taken, or are already aware of a reminder. Examples: 'I took it', 'already done', 'I know', 'I have taken my medicine', 'appointment cancelled'.",
+                description: `Call this when the user indicates they have completed, taken, or are aware of a reminder.
+                              This includes ANY of these patterns in ANY language:
+                              - Confirming completion: "I took it", "done", "already did it", "hab ich genommen", "ist erledigt", "hab ich schon"
+                              - Confirming awareness: "I know", "I remember", "ich weiß"  
+                              - Cancellation: "cancelled", "not needed", "abgesagt"
+                              - Past tense about the event: "I went", "I called", "ich war dort"`,
                 parameters: {
                   type: "object",
                   properties: {

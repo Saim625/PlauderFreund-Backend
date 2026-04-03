@@ -110,7 +110,7 @@ export async function deliverRemindersOnSessionStart(token, socket, gptWs) {
       await deliverReminder(reminder, socket, gptWs);
     }
   } catch (err) {
-    logger.error("❌ Session-start reminder delivery failed:", err.message);
+    logger.error("❌ Session-start reminder delivery failed:", err);
   }
 }
 

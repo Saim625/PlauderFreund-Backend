@@ -16,6 +16,16 @@ greetingRouter.post("/generate-greeting", async (req, res) => {
       return res.status(400).json({ error: "Token is required" });
     }
 
+    // ✅ Validate token exists before doing anything
+    const userExists = await prisma.userAccessToken.findUnique({
+      where: { token },
+    });
+
+    if (!userExists) {
+      console.warn(`⚠️ Invalid token attempted: ${token}`);
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
     const memory = await prisma.memorySummary.findUnique({
       where: { token },
       include: { summary: true },
@@ -42,19 +52,19 @@ greetingRouter.post("/generate-greeting", async (req, res) => {
     const prompt = [
       {
         role: "system",
-        content: `You are a warm, friendly AI assistant speaking to the user in German.
-Generate a single short greeting sentence — maximum 15 words.
-Every greeting must feel genuinely different in structure and opening — not just different words for the same idea.
+        content: `You are a warm, friendly AI assistant speaking to the user in German or use user prefered language if present in user-biography.
+        Generate a single short greeting sentence — maximum 15 words.
+        Every greeting must feel genuinely different in structure and opening — not just different words for the same idea.
 
-Vary the opening style each time. Examples of different styles, these styles are just for example:
-- Ask something personal: "Wie war dein gestrige Spaziergang, [Name]?"
-- Make an observation: "Schön, dass du wieder da bist!"
-- Reference something from their life: "Hast du heute schon deine Medizin genommen?"
-- Be playful: "Na, wer kommt denn da wieder vorbei?"
-- Be warm and simple: "Hallo [Name], ich hab auf dich gewartet."
+        Vary the opening style each time. Examples of different styles, these styles are just for example:
+        - Ask something personal: "Wie war dein gestrige Spaziergang, [Name]?"
+        - Make an observation: "Schön, dass du wieder da bist!"
+        - Reference something from their life: "Hast du heute schon deine Medizin genommen?"
+        - Be playful: "Na, wer kommt denn da wieder vorbei?"
+        - Be warm and simple: "Hallo [Name], ich hab auf dich gewartet."
 
-Use the user's biography to pick the most relevant style for today.
-STRICT RULE: Do NOT use the same opening word or sentence structure as any previous greeting listed below.
+        Use the user's biography to pick the most relevant style for today.
+        STRICT RULE: Do NOT use the same opening word or sentence structure as any previous greeting listed below.
 
 Previous greetings (forbidden to resemble):
 ${previousGreetingsText}`,
@@ -70,30 +80,20 @@ ${previousGreetingsText}`,
     greetingStore.set(token, greetingText);
 
     try {
-      const userExists = await prisma.userAccessToken.findUnique({
-        where: { token },
+      await prisma.greetingHistory.create({
+        data: { userToken: token, text: greetingText },
       });
 
-      if (userExists) {
-        await prisma.greetingHistory.create({
-          data: { userToken: token, text: greetingText },
-        });
+      const allGreetings = await prisma.greetingHistory.findMany({
+        where: { userToken: token },
+        orderBy: { createdAt: "desc" },
+      });
 
-        const allGreetings = await prisma.greetingHistory.findMany({
-          where: { userToken: token },
-          orderBy: { createdAt: "desc" },
+      if (allGreetings.length > MAX_GREETING_HISTORY) {
+        const toDelete = allGreetings.slice(MAX_GREETING_HISTORY);
+        await prisma.greetingHistory.deleteMany({
+          where: { id: { in: toDelete.map((g) => g.id) } },
         });
-
-        if (allGreetings.length > MAX_GREETING_HISTORY) {
-          const toDelete = allGreetings.slice(MAX_GREETING_HISTORY);
-          await prisma.greetingHistory.deleteMany({
-            where: { id: { in: toDelete.map((g) => g.id) } },
-          });
-        }
-      } else {
-        console.warn(
-          `⚠️ Token not found in UserAccessToken — skipping greeting history save`,
-        );
       }
     } catch (historyErr) {
       console.error(

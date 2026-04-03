@@ -4,36 +4,37 @@ import { getGPTResponse } from "./gptService.js";
 import { parseAndSaveReminders } from "./reminderService.js"; // no longer calls GPT
 
 export async function flushConversationToMemory(token, timezone) {
-  console.log("🧠 Flushing conversation to memory:", token);
+  try {
+    console.log("🧠 Flushing conversation to memory:", token);
+    const convo = await prisma.conversation.findUnique({
+      where: { token },
+      include: { messages: true },
+    });
 
-  const convo = await prisma.conversation.findUnique({
-    where: { token },
-    include: { messages: true },
-  });
+    if (!convo || !convo.messages.length) return;
 
-  if (!convo || !convo.messages.length) return;
+    // 1️⃣ Get unprocessed messages
+    const unprocessed = convo.messages.filter((m) => !m.processed);
+    if (!unprocessed.length) return;
 
-  // 1️⃣ Get unprocessed messages
-  const unprocessed = convo.messages.filter((m) => !m.processed);
-  if (!unprocessed.length) return;
+    // 2️⃣ Build conversation text
+    const conversationText = unprocessed
+      .map((m) =>
+        m.role === "user" ? `USER: ${m.text}` : `ASSISTANT: ${m.text}`,
+      )
+      .join("\n");
 
-  // 2️⃣ Build conversation text
-  const conversationText = unprocessed
-    .map((m) =>
-      m.role === "user" ? `USER: ${m.text}` : `ASSISTANT: ${m.text}`,
-    )
-    .join("\n");
+    const existingFacts = await prisma.memorySummary.findUnique({
+      where: { token },
+      include: { summary: true },
+    });
 
-  const existingFacts = await prisma.memorySummary.findUnique({
-    where: { token },
-    include: { summary: true },
-  });
+    const safeTimezone =
+      timezone && timezone !== "undefined" ? timezone : "UTC";
+    const now = new Date();
 
-  const safeTimezone = timezone && timezone !== "undefined" ? timezone : "UTC";
-  const now = new Date();
-
-  // 3️⃣ Single combined prompt — facts + reminders in one GPT call
-  const prompt = `
+    // 3️⃣ Single combined prompt — facts + reminders in one GPT call
+    const prompt = `
 You are a memory and reminder extraction system for a voice assistant.
 
 You are given:
@@ -137,39 +138,43 @@ Return ONLY this JSON. No explanation, no markdown:
 """${conversationText}"""
 `;
 
-  // 4️⃣ Single GPT call
-  const raw = await getGPTResponse([{ role: "user", content: prompt }]);
-  if (!raw) return;
+    // 4️⃣ Single GPT call
+    const raw = await getGPTResponse([{ role: "user", content: prompt }]);
+    if (!raw) return;
 
-  let parsed;
-  try {
-    parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
+    let parsed;
+    try {
+      parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
+    } catch (err) {
+      console.error("❌ GPT JSON parse failed:", raw);
+      return;
+    }
+
+    const facts = Array.isArray(parsed.facts) ? parsed.facts : [];
+    const reminders = Array.isArray(parsed.reminders) ? parsed.reminders : [];
+
+    // 5️⃣ Save facts
+    if (facts.length > 0) {
+      await updateMemorySummary(token, facts);
+      console.log(`✅ ${facts.length} facts stored`);
+    } else {
+      console.log("ℹ️ No new facts to store");
+    }
+
+    // 6️⃣ Delete processed messages
+    const unprocessedMessageIds = unprocessed.map((m) => m.id);
+
+    await prisma.message.deleteMany({
+      where: { id: { in: unprocessedMessageIds } },
+    });
+
+    // 7️⃣ Save reminders (no GPT call — just parse + upsert)
+    try {
+      await parseAndSaveReminders(token, reminders);
+    } catch (err) {
+      console.error("❌ Reminder save failed (non-fatal):", err.message);
+    }
   } catch (err) {
-    console.error("❌ GPT JSON parse failed:", raw);
-    return;
-  }
-
-  const facts = Array.isArray(parsed.facts) ? parsed.facts : [];
-  const reminders = Array.isArray(parsed.reminders) ? parsed.reminders : [];
-
-  // 5️⃣ Save facts
-  if (facts.length > 0) {
-    await updateMemorySummary(token, facts);
-    console.log(`✅ ${facts.length} facts stored`);
-  } else {
-    console.log("ℹ️ No new facts to store");
-  }
-
-  // 6️⃣ Delete processed messages
-  const unprocessedMessageIds = unprocessed.map((m) => m.id);
-  await prisma.message.deleteMany({
-    where: { id: { in: unprocessedMessageIds } },
-  });
-
-  // 7️⃣ Save reminders (no GPT call — just parse + upsert)
-  try {
-    await parseAndSaveReminders(token, reminders);
-  } catch (err) {
-    console.error("❌ Reminder save failed (non-fatal):", err.message);
+    console.log("Error in FlushConversationToMemory: ", err.message);
   }
 }
