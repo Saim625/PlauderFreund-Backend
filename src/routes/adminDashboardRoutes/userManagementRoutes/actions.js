@@ -94,6 +94,9 @@ actionRouter.delete(
         }),
         prisma.conversation.deleteMany({ where: { token: userRecord.token } }),
         prisma.reminder.deleteMany({ where: { userToken: userRecord.token } }),
+        prisma.greetingHistory.deleteMany({
+          where: { userToken: userRecord.token },
+        }),
       ]);
 
       // Delete user token
