@@ -16,6 +16,8 @@ model UserAccessToken {
   createdAt DateTime @default(now())
   reminders Reminder[]
   greetingHistory GreetingHistory[]
+  sessionLogs     SessionLog[]   
+  usageSummary    UserUsageSummary? 
 }
 
 model AdminAccessToken {
@@ -163,4 +165,82 @@ model GreetingHistory {
   user UserAccessToken @relation(fields: [userToken], references: [token])
 
   @@map("greeting_history")
+}
+
+model SessionLog {
+  id                    Int      @id @default(autoincrement())
+  userToken             String   @map("user_token")
+  sessionId             String   @unique @map("session_id")
+  startedAt             DateTime @map("started_at") @db.Timestamptz
+  endedAt               DateTime? @map("ended_at") @db.Timestamptz
+  durationSeconds       Int      @default(0) @map("duration_seconds")
+
+  // Realtime GPT usage
+  realtimeTextInputTokens   Int   @default(0) @map("realtime_text_input_tokens")
+  realtimeAudioInputTokens  Int   @default(0) @map("realtime_audio_input_tokens")
+  realtimeCachedInputTokens Int   @default(0) @map("realtime_cached_input_tokens")
+  realtimeOutputTokens      Int   @default(0) @map("realtime_output_tokens")
+
+  // Chat completion usage (greeting + facts/reminders)
+  chatInputTokens       Int      @default(0) @map("chat_input_tokens")
+  chatOutputTokens      Int      @default(0) @map("chat_output_tokens")
+
+  // ElevenLabs usage
+  realtimeAudioChars    Int      @default(0) @map("realtime_audio_chars")
+  greetingAudioChars    Int      @default(0) @map("greeting_audio_chars")
+
+  // Costs in USD
+  realtimeGptCost       Float    @default(0) @map("realtime_gpt_cost")
+  chatGptCost           Float    @default(0) @map("chat_gpt_cost")
+  elevenlabsCost        Float    @default(0) @map("elevenlabs_cost")
+  totalCost             Float    @default(0) @map("total_cost")
+
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz
+  user                  UserAccessToken @relation(fields: [userToken], references: [token])
+
+  @@map("session_logs")
+}
+
+model UserUsageSummary {
+  id                    Int      @id @default(autoincrement())
+  userToken             String   @unique @map("user_token")
+  totalSessions         Int      @default(0) @map("total_sessions")
+  totalDurationSeconds  Int      @default(0) @map("total_duration_seconds")
+  totalRealtimeTextInputTokens   Int @default(0) @map("total_realtime_text_input_tokens")
+  totalRealtimeAudioInputTokens  Int @default(0) @map("total_realtime_audio_input_tokens")
+  totalRealtimeCachedInputTokens Int @default(0) @map("total_realtime_cached_input_tokens")
+  totalRealtimeOutputTokens Int  @default(0) @map("total_realtime_output_tokens")
+  totalChatInputTokens  Int      @default(0) @map("total_chat_input_tokens")
+  totalChatOutputTokens Int      @default(0) @map("total_chat_output_tokens")
+  totalRealtimeAudioChars Int    @default(0) @map("total_realtime_audio_chars")
+  totalGreetingAudioChars Int    @default(0) @map("total_greeting_audio_chars")
+  totalCost             Float    @default(0) @map("total_cost")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  user                  UserAccessToken @relation(fields: [userToken], references: [token])
+  @@map("user_usage_summary")
+}
+
+model ProviderPricing {
+  id           Int      @id @default(autoincrement())
+  provider     String   // "openai_realtime" | "openai_chat" | "elevenlabs"
+  priceType    String   @map("price_type") // "input_token" | "output_token" | "audio_character"
+  pricePerUnit Float    @map("price_per_unit") // USD per single unit
+  unitSize     Int      @default(1) @map("unit_size") // per how many units
+  description  String?
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@unique([provider, priceType])
+  @@map("provider_pricing")
+}
+
+model OperationalCost {
+  id          Int      @id @default(autoincrement())
+  label       String   // "server", "domain" etc
+  costUsd     Float    @map("cost_usd")
+  month       DateTime @map("month") @db.Timestamptz
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("operational_costs")
 }

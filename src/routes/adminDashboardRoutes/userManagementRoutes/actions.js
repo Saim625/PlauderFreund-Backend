@@ -87,22 +87,27 @@ actionRouter.delete(
       // If needed, this check can be removed or handled differently
 
       // Delete related data
-      await Promise.all([
+      await prisma.$transaction([
         prisma.memorySummary.deleteMany({ where: { token: userRecord.token } }),
         prisma.personalityConfig.deleteMany({
           where: { userToken: userRecord.token },
         }),
         prisma.conversation.deleteMany({ where: { token: userRecord.token } }),
         prisma.reminder.deleteMany({ where: { userToken: userRecord.token } }),
+        prisma.reminderDeliveryLog.deleteMany({
+          where: { userToken: userRecord.token },
+        }),
         prisma.greetingHistory.deleteMany({
           where: { userToken: userRecord.token },
         }),
+        prisma.sessionLog.deleteMany({
+          where: { userToken: userRecord.token },
+        }),
+        prisma.userUsageSummary.deleteMany({
+          where: { userToken: userRecord.token },
+        }),
+        prisma.userAccessToken.delete({ where: { id: tokenId } }),
       ]);
-
-      // Delete user token
-      await prisma.userAccessToken.delete({
-        where: { id: tokenId },
-      });
 
       return res.json({
         success: true,

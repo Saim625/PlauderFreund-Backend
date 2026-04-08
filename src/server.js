@@ -23,6 +23,7 @@ import {
   startReminderCleanup,
   startReminderScheduler,
 } from "./services/reminderScheduler.js";
+import { usageRouter } from "./routes/adminDashboardRoutes/usageRoutes.js";
 
 const app = express();
 
@@ -49,6 +50,7 @@ app.use("/api", adminActionRouter);
 app.use("/api", summaryEditorRouter);
 app.use("/api", personalityActionRouter);
 app.use("/api", adminPasswordRouter);
+app.use("/api", usageRouter);
 
 const httpServer = createServer(app);
 

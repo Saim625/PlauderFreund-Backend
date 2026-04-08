@@ -15,9 +15,16 @@ export async function getGPTResponse(messages) {
 
     // Extract text output
     const content = completion.choices[0]?.message?.content;
-    return content ? content.trim() : null;
+    const usage = completion.usage || null;
+    console.log("Chat Completion APi Usage: ", usage);
+
+    return {
+      content: content ? content.trim() : null,
+      inputTokens: usage?.prompt_tokens || 0,
+      outputTokens: usage?.completion_tokens || 0,
+    };
   } catch (err) {
     console.log(err.message);
-    return null;
+    return { content: null, inputTokens: 0, outputTokens: 0 };
   }
 }

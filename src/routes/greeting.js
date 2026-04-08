@@ -4,6 +4,11 @@ import { getGPTResponse } from "../services/gptService.js";
 import { generateGreetingAudio } from "../services/generateGreetingAudio.js";
 import { greetingStore } from "../state/greetingStore.js";
 import { getVoiceConfigForToken } from "../utils/getVoiceConfigForToken.js";
+import { sessionRegistry } from "../services/sessionRegistry.js";
+import {
+  addChatTokens,
+  addGreetingAudioChars,
+} from "../services/usageTracker.js";
 
 export const greetingRouter = express.Router();
 
@@ -75,9 +80,21 @@ ${previousGreetingsText}`,
       },
     ];
 
-    const greetingText = await getGPTResponse(prompt);
+    const {
+      content: greetingText,
+      inputTokens,
+      outputTokens,
+    } = await getGPTResponse(prompt);
 
     greetingStore.set(token, greetingText);
+
+    const sessionId = sessionRegistry.getSessionId(token);
+
+    console.log("SessionId", sessionId);
+
+    if (sessionId) {
+      addChatTokens(sessionId, inputTokens, outputTokens);
+    }
 
     try {
       await prisma.greetingHistory.create({
@@ -103,6 +120,13 @@ ${previousGreetingsText}`,
     }
 
     const audioBuffer = await generateGreetingAudio(greetingText, voiceConfig);
+    console.log("Greeting Chars: ", greetingText.length);
+
+    // Track greeting audio characters
+    if (sessionId) {
+      addGreetingAudioChars(sessionId, greetingText.length);
+      console.log("Greeting Audio Chatrs Insterted");
+    }
 
     res.status(200).json({
       text: greetingText,

@@ -20,6 +20,15 @@ import { flushConversationToMemory } from "../services/flushConversationToMemory
 import { getVoiceConfigForToken } from "../utils/getVoiceConfigForToken.js";
 import { deliverRemindersOnSessionStart } from "../services/reminderScheduler.js"; // 👈 NEW
 import { handleToolCall } from "../utils/toolHandlers.js";
+import {
+  addRealtimeAudioChars,
+  addRealtimeTokens,
+  clearSessionUsage,
+  getSessionUsage,
+  initSessionUsage,
+} from "../services/usageTracker.js";
+import { sessionRegistry } from "../services/sessionRegistry.js";
+import { calculateSessionCost } from "../services/costCalculator.js";
 
 export async function handleRealtimeAI(socket, token, timezone) {
   let gptWs;
@@ -36,9 +45,10 @@ export async function handleRealtimeAI(socket, token, timezone) {
 
   const safeTimeZone = timezone && timezone !== undefined ? timezone : "UTC";
 
-  const userId = socket.id; // Use socket.id as unique user identifier
+  const sessionId = socket.id; // Use socket.id as unique user identifier
 
-  initSession(userId);
+  initSession(sessionId);
+  const sessionStartedAt = new Date();
 
   const voiceConfig = await getVoiceConfigForToken(token);
 
@@ -48,8 +58,8 @@ export async function handleRealtimeAI(socket, token, timezone) {
 
     const voiceId = voiceConfig.voiceId; // Replace with dynamic voiceId from user config
 
-    elevenConnection = await initElevenLabsForUser(userId, voiceId, socket);
-    logger.info(`✅ [${userId}] ElevenLabs initialized`);
+    elevenConnection = await initElevenLabsForUser(sessionId, voiceId, socket);
+    logger.info(`✅ [${sessionId}] ElevenLabs initialized`);
 
     // 🔥 STEP 2: Load memory
     const memory = await prisma.memorySummary.findUnique({
@@ -60,16 +70,19 @@ export async function handleRealtimeAI(socket, token, timezone) {
 
     // 🔥 STEP 3: Connect to GPT Realtime API
     gptWs = await connectToRealtimeAPI(summary, token, safeTimeZone);
-    logger.info(`✅ [${userId}] GPT Realtime connected`);
+    logger.info(`✅ [${sessionId}] GPT Realtime connected`);
     // ✅ NEW: Attach gptWs to socket so cron scheduler can access it mid-session
     socket.data = socket.data || {};
     socket.data.gptWs = gptWs;
+
+    initSessionUsage(sessionId);
+    logger.info(`🔍 [${sessionId}] Session usage initialized`);
 
     attachGPTListeners();
 
     async function reconnectGPT() {
       if (gptReconnectAttempts >= GPT_MAX_RECONNECT) {
-        logger.error(`❌ [${userId}] GPT max reconnect attempts reached`);
+        logger.error(`❌ [${sessionId}] GPT max reconnect attempts reached`);
         socket.emit("ai-error", {
           message: "AI connection lost. Please refresh.",
         });
@@ -82,7 +95,7 @@ export async function handleRealtimeAI(socket, token, timezone) {
         10000,
       );
       logger.info(
-        `🔄 [${userId}] GPT reconnecting in ${delay}ms (attempt ${gptReconnectAttempts}/${GPT_MAX_RECONNECT})`,
+        `🔄 [${sessionId}] GPT reconnecting in ${delay}ms (attempt ${gptReconnectAttempts}/${GPT_MAX_RECONNECT})`,
       );
 
       await new Promise((res) => setTimeout(res, delay));
@@ -102,30 +115,30 @@ export async function handleRealtimeAI(socket, token, timezone) {
         socket.data.gptWs = gptWs;
 
         gptReconnectAttempts = 0; // reset on success
-        logger.info(`✅ [${userId}] GPT reconnected successfully`);
+        logger.info(`✅ [${sessionId}] GPT reconnected successfully`);
 
         // Re-attach all gptWs listeners by calling attachGPTListeners (see note below)
         attachGPTListeners();
       } catch (err) {
-        logger.error(`❌ [${userId}] GPT reconnect failed:`, err.message);
+        logger.error(`❌ [${sessionId}] GPT reconnect failed:`, err.message);
         reconnectGPT(); // retry
       }
     }
   } catch (err) {
-    logger.error(`❌ [${userId}] Initialization failed:`, err);
+    logger.error(`❌ [${sessionId}] Initialization failed:`, err);
     socket.emit("ai-error", {
       message: "AI connection failed: " + err.message,
     });
 
     // Cleanup on error
     if (elevenConnection) {
-      cleanupUserConnection(userId);
+      cleanupUserConnection(sessionId);
     }
     return;
   }
 
   socket.on("conversation-started", () => {
-    const s = sessions.get(userId);
+    const s = sessions.get(sessionId);
     if (!s) return;
 
     s.conversationActive = true;
@@ -135,7 +148,7 @@ export async function handleRealtimeAI(socket, token, timezone) {
   });
 
   socket.on("trigger-reengagement", () => {
-    markReengagementTriggered(userId);
+    markReengagementTriggered(sessionId);
 
     gptWs.send(
       JSON.stringify({
@@ -155,15 +168,17 @@ export async function handleRealtimeAI(socket, token, timezone) {
 
       // 🎤 User started speaking - interrupt AI
       if (event.type === "input_audio_buffer.speech_started") {
-        const connection = getConnectionForUser(userId);
+        const connection = getConnectionForUser(sessionId);
 
         // 🔥 CRITICAL: Mark user activity IMMEDIATELY to prevent re-engagement
-        markUserSpeaking(userId, true);
-        logger.info(`🎤 [${userId}] User started speaking - activity updated`);
+        markUserSpeaking(sessionId, true);
+        logger.info(
+          `🎤 [${sessionId}] User started speaking - activity updated`,
+        );
 
         if (connection && connection.contextId) {
           logger.info(
-            `🛑 [${userId}] User interrupted - canceling AI response`,
+            `🛑 [${sessionId}] User interrupted - canceling AI response`,
           );
 
           // Notify frontend
@@ -185,8 +200,8 @@ export async function handleRealtimeAI(socket, token, timezone) {
 
       // 🛑 User stopped speaking
       if (event.type === "input_audio_buffer.speech_stopped") {
-        markUserSpeaking(userId, false);
-        logger.info(`🛑 [${userId}] User stopped speaking`);
+        markUserSpeaking(sessionId, false);
+        logger.info(`🛑 [${sessionId}] User stopped speaking`);
       }
 
       // 📝 User speech transcription completed
@@ -194,7 +209,7 @@ export async function handleRealtimeAI(socket, token, timezone) {
         event.type === "conversation.item.input_audio_transcription.completed"
       ) {
         const userTranscript = event.transcript;
-        markUserAudio(userId);
+        markUserAudio(sessionId);
 
         userMessageCount++;
         if (userMessageCount === REMINDER_TRIGGER_AFTER_MESSAGES) {
@@ -202,7 +217,7 @@ export async function handleRealtimeAI(socket, token, timezone) {
           console.log("Reminder triggered!!!!");
         }
 
-        const s = sessions.get(userId);
+        const s = sessions.get(sessionId);
         if (s) {
           s.cooldownUntil = 0;
         }
@@ -219,10 +234,10 @@ export async function handleRealtimeAI(socket, token, timezone) {
         currentResponseId = event.response?.id;
         textChunkCount = 0;
 
-        const connection = getConnectionForUser(userId);
+        const connection = getConnectionForUser(sessionId);
 
         if (!connection) {
-          logger.error(`❌ [${userId}] No ElevenLabs connection found`);
+          logger.error(`❌ [${sessionId}] No ElevenLabs connection found`);
           socket.emit("ai-error", { message: "Audio service disconnected" });
           return;
         }
@@ -232,7 +247,7 @@ export async function handleRealtimeAI(socket, token, timezone) {
 
         if (oldContextId) {
           logger.info(
-            `🔄 [${userId}] Closing old context ${oldContextId} before starting new one`,
+            `🔄 [${sessionId}] Closing old context ${oldContextId} before starting new one`,
           );
           connection.closeContext();
         }
@@ -240,7 +255,7 @@ export async function handleRealtimeAI(socket, token, timezone) {
         const newContextId = connection.startContext(voiceConfig);
 
         if (!newContextId) {
-          logger.error(`❌ [${userId}] Failed to start audio context`);
+          logger.error(`❌ [${sessionId}] Failed to start audio context`);
           socket.emit("ai-error", { message: "Failed to start audio stream" });
         }
       }
@@ -250,11 +265,11 @@ export async function handleRealtimeAI(socket, token, timezone) {
         const textChunk = event.delta;
         textChunkCount++;
 
-        const connection = getConnectionForUser(userId);
+        const connection = getConnectionForUser(sessionId);
 
         if (!connection) {
           logger.error(
-            `❌ [${userId}] No connection for text chunk #${textChunkCount}`,
+            `❌ [${sessionId}] No connection for text chunk #${textChunkCount}`,
           );
           return;
         }
@@ -267,9 +282,14 @@ export async function handleRealtimeAI(socket, token, timezone) {
 
         const sendResult = connection.sendText(textChunk);
 
+        // ✅ Track audio characters sent to ElevenLabs
+        if (sendResult && textChunk) {
+          addRealtimeAudioChars(sessionId, textChunk.length);
+        }
+
         if (!sendResult) {
           logger.error(
-            `❌ [${userId}] Failed to send text chunk #${textChunkCount}`,
+            `❌ [${sessionId}] Failed to send text chunk #${textChunkCount}`,
           );
         }
       }
@@ -284,7 +304,7 @@ export async function handleRealtimeAI(socket, token, timezone) {
           text: fullAiResponse,
         });
 
-        const connection = getConnectionForUser(userId);
+        const connection = getConnectionForUser(sessionId);
 
         if (connection && connection.contextId) {
           // Flush remaining audio
@@ -296,6 +316,18 @@ export async function handleRealtimeAI(socket, token, timezone) {
       if (event.type === "response.done") {
         socket.emit("ai-response-done", { response: event.response });
         currentResponseId = null;
+
+        const usage = event.response?.usage;
+        logger.info(
+          `RealTime USAGE DETAILS: ${JSON.stringify(usage, null, 2)}`,
+        );
+        if (usage) {
+          addRealtimeTokens(
+            sessionId,
+            usage.input_token_details || {},
+            usage.output_tokens || 0,
+          );
+        }
       }
 
       // ❌ AI response cancelled
@@ -306,7 +338,7 @@ export async function handleRealtimeAI(socket, token, timezone) {
 
       if (event.type === "response.function_call_arguments.done") {
         try {
-          await handleToolCall(event, socket.id, token, gptWs, safeTimeZone);
+          await handleToolCall(event, sessionId, token, gptWs, safeTimeZone);
         } catch (err) {
           logger.error("❌ Tool call failed:", err);
         }
@@ -315,20 +347,20 @@ export async function handleRealtimeAI(socket, token, timezone) {
 
     gptWs.on("close", (code, reason) => {
       logger.warn(
-        `⚠️ [${userId}] GPT WebSocket closed. Code: ${code}, Reason: ${reason}`,
+        `⚠️ [${sessionId}] GPT WebSocket closed. Code: ${code}, Reason: ${reason}`,
       );
 
       // Don't reconnect if socket session is already gone
       if (!socket.connected) {
         logger.info(
-          `ℹ️ [${userId}] Socket also disconnected — skipping GPT reconnect`,
+          `ℹ️ [${sessionId}] Socket also disconnected — skipping GPT reconnect`,
         );
         return;
       }
 
       // Don't reconnect on intentional close (1000 = normal closure)
       if (code === 1000) {
-        logger.info(`ℹ️ [${userId}] GPT closed normally — no reconnect`);
+        logger.info(`ℹ️ [${sessionId}] GPT closed normally — no reconnect`);
         return;
       }
 
@@ -336,7 +368,7 @@ export async function handleRealtimeAI(socket, token, timezone) {
     });
 
     gptWs.on("error", (err) => {
-      logger.error(`❌ [${userId}] GPT WebSocket error:`, err.message);
+      logger.error(`❌ [${sessionId}] GPT WebSocket error:`, err.message);
       // close event will fire after error — reconnect handled there
     });
   }
@@ -353,36 +385,36 @@ export async function handleRealtimeAI(socket, token, timezone) {
         }),
       );
     } catch (err) {
-      logger.error(`❌ [${userId}] Error forwarding audio to GPT:`, err);
+      logger.error(`❌ [${sessionId}] Error forwarding audio to GPT:`, err);
     }
   });
 
   // 🔊 Frontend finished playing audio
   socket.on("ai-audio-done", ({ contextId }) => {
     logger.info(
-      `🔊 [${userId}] Frontend confirmed playback done at ${new Date().toISOString()}`,
+      `🔊 [${sessionId}] Frontend confirmed playback done at ${new Date().toISOString()}`,
     );
 
     // 🔥 FIX: Prevent duplicate processing of same contextId
     if (lastProcessedContextId === contextId) {
       logger.warn(
-        `⚠️ [${userId}] Duplicate ai-audio-done for context ${contextId}, ignoring`,
+        `⚠️ [${sessionId}] Duplicate ai-audio-done for context ${contextId}, ignoring`,
       );
       return;
     }
 
     lastProcessedContextId = contextId;
 
-    const connection = getConnectionForUser(userId);
+    const connection = getConnectionForUser(sessionId);
 
     if (!connection) {
-      logger.warn(`⚠️ [${userId}] No connection found for audio-done event`);
+      logger.warn(`⚠️ [${sessionId}] No connection found for audio-done event`);
       return;
     }
 
     if (contextId !== connection.contextId) {
       logger.warn(
-        `⚠️ [${userId}] Context mismatch. Received=${contextId}, Active=${connection.contextId}`,
+        `⚠️ [${sessionId}] Context mismatch. Received=${contextId}, Active=${connection.contextId}`,
       );
     }
 
@@ -394,37 +426,143 @@ export async function handleRealtimeAI(socket, token, timezone) {
     // Reset state
     textChunkCount = 0;
 
-    markAiPlaybackDone(userId);
+    markAiPlaybackDone(sessionId);
     logger.info(
-      `✅ [${userId}] Playback marked as done. Re-engagement timer starts NOW.`,
+      `✅ [${sessionId}] Playback marked as done. Re-engagement timer starts NOW.`,
     );
   });
 
   // 🔌 User disconnected
   socket.on("disconnect", async () => {
-    logger.info(`🔴 [${userId}] User disconnecting...`);
+    logger.info(`🔴 [${sessionId}] User disconnecting...`);
 
     try {
       // Flush conversation to memory
-      await flushConversationToMemory(token, safeTimeZone);
-      logger.info(`✅ [${userId}] Memory flushed`);
+      await flushConversationToMemory(token, safeTimeZone, sessionId);
+      logger.info(`✅ [${sessionId}] Memory flushed`);
     } catch (err) {
-      logger.error(`❌ [${userId}] Memory flush failed:`, err);
+      logger.error(`❌ [${sessionId}] Memory flush failed:`, err);
     }
+    // ✅ Finalize usage tracking and save to DB
+    try {
+      const endedAt = new Date();
+      const durationSeconds = Math.round((endedAt - sessionStartedAt) / 1000);
 
+      logger.info(`🔍 [${sessionId}] Looking up session usage...`);
+      const usage = getSessionUsage(sessionId);
+      logger.info(`🔍 [${sessionId}] Usage found: ${JSON.stringify(usage)}`);
+
+      if (usage) {
+        logger.info(`🔍 [${sessionId}] Calculating costs...`);
+        const result = await calculateSessionCost(usage);
+        logger.info(`🔍 [${sessionId}] Cost result: ${JSON.stringify(result)}`);
+
+        const costs = result.success
+          ? result.data
+          : {
+              realtimeGptCost: 0,
+              chatGptCost: 0,
+              elevenlabsCost: 0,
+              totalCost: 0,
+            };
+
+        if (!result.success) {
+          logger.error(`❌ Cost calculation failed: ${result.error}`);
+        }
+        logger.info(`🔍 [${sessionId}] Creating session log in DB...`);
+
+        await prisma.sessionLog.create({
+          data: {
+            userToken: token,
+            sessionId,
+            startedAt: sessionStartedAt,
+            endedAt,
+            durationSeconds,
+            realtimeTextInputTokens: usage.realtimeTextInputTokens,
+            realtimeAudioInputTokens: usage.realtimeAudioInputTokens,
+            realtimeCachedInputTokens: usage.realtimeCachedInputTokens,
+            realtimeOutputTokens: usage.realtimeOutputTokens,
+            chatInputTokens: usage.chatInputTokens,
+            chatOutputTokens: usage.chatOutputTokens,
+            realtimeAudioChars: usage.realtimeAudioChars,
+            greetingAudioChars: usage.greetingAudioChars,
+            realtimeGptCost: costs.realtimeGptCost,
+            chatGptCost: costs.chatGptCost,
+            elevenlabsCost: costs.elevenlabsCost,
+            totalCost: costs.totalCost,
+          },
+        });
+
+        logger.info(`🔍 [${sessionId}] Session log created ✅`);
+
+        // Update user cumulative summary
+        await prisma.userUsageSummary.upsert({
+          where: { userToken: token },
+          create: {
+            userToken: token,
+            totalSessions: 1,
+            totalDurationSeconds: durationSeconds,
+            totalRealtimeTextInputTokens: usage.realtimeTextInputTokens,
+            totalRealtimeAudioInputTokens: usage.realtimeAudioInputTokens,
+            totalRealtimeCachedInputTokens: usage.realtimeCachedInputTokens,
+            totalRealtimeOutputTokens: usage.realtimeOutputTokens,
+            totalChatInputTokens: usage.chatInputTokens,
+            totalChatOutputTokens: usage.chatOutputTokens,
+            totalRealtimeAudioChars: usage.realtimeAudioChars,
+            totalGreetingAudioChars: usage.greetingAudioChars,
+            totalCost: costs.totalCost,
+          },
+          update: {
+            totalSessions: { increment: 1 },
+            totalDurationSeconds: { increment: durationSeconds },
+            totalRealtimeTextInputTokens: {
+              increment: usage.realtimeTextInputTokens,
+            },
+            totalRealtimeAudioInputTokens: {
+              increment: usage.realtimeAudioInputTokens,
+            },
+            totalRealtimeCachedInputTokens: {
+              increment: usage.realtimeCachedInputTokens,
+            },
+            totalRealtimeOutputTokens: {
+              increment: usage.realtimeOutputTokens,
+            },
+            totalChatInputTokens: { increment: usage.chatInputTokens },
+            totalChatOutputTokens: { increment: usage.chatOutputTokens },
+            totalRealtimeAudioChars: { increment: usage.realtimeAudioChars },
+            totalGreetingAudioChars: { increment: usage.greetingAudioChars },
+            totalCost: { increment: costs.totalCost },
+          },
+        });
+
+        logger.info(
+          `✅ [${sessionId}] Session usage saved — total cost: $${costs.totalCost.toFixed(6)}`,
+        );
+      } else {
+        logger.warn(
+          `⚠️ [${sessionId}] usage is NULL — initSessionUsage was never called or wrong sessionId`,
+        );
+      }
+    } catch (err) {
+      logger.error(
+        `❌ [${sessionId}] Usage tracking failed (non-fatal): ${err?.message || err}`,
+      );
+    } finally {
+      clearSessionUsage(sessionId);
+    }
     // Destroy session
-    destroySession(userId);
+    destroySession(sessionId);
 
     // 🔥 FIX: Clean up THIS user's ElevenLabs connection
-    cleanupUserConnection(userId);
-    logger.info(`✅ [${userId}] ElevenLabs connection cleaned up`);
+    cleanupUserConnection(sessionId);
+    logger.info(`✅ [${sessionId}] ElevenLabs connection cleaned up`);
 
     // Close GPT WebSocket
     if (gptWs) {
       gptWs.close();
-      logger.info(`✅ [${userId}] GPT connection closed`);
+      logger.info(`✅ [${sessionId}] GPT connection closed`);
     }
 
-    logger.info(`✅ [${userId}] Full cleanup complete`);
+    logger.info(`✅ [${sessionId}] Full cleanup complete`);
   });
 }

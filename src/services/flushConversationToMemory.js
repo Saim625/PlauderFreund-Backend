@@ -2,8 +2,9 @@ import prisma from "../lib/db.js";
 import { updateMemorySummary } from "../controllers/memoryController.js";
 import { getGPTResponse } from "./gptService.js";
 import { parseAndSaveReminders } from "./reminderService.js"; // no longer calls GPT
+import { addChatTokens } from "./usageTracker.js";
 
-export async function flushConversationToMemory(token, timezone) {
+export async function flushConversationToMemory(token, timezone, sessionId) {
   try {
     console.log("🧠 Flushing conversation to memory:", token);
     const convo = await prisma.conversation.findUnique({
@@ -139,7 +140,17 @@ Return ONLY this JSON. No explanation, no markdown:
 `;
 
     // 4️⃣ Single GPT call
-    const raw = await getGPTResponse([{ role: "user", content: prompt }]);
+    const {
+      content: raw,
+      inputTokens,
+      outputTokens,
+    } = await getGPTResponse([{ role: "user", content: prompt }]);
+
+    // Track chat token usage for this extraction call
+    if (sessionId) {
+      addChatTokens(sessionId, inputTokens, outputTokens);
+    }
+
     if (!raw) return;
 
     let parsed;

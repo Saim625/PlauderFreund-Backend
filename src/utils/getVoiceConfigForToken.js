@@ -10,31 +10,35 @@ import prisma from "../lib/db.js";
  * }}
  */
 export async function getVoiceConfigForToken(token) {
-  if (!token) {
-    throw new Error("Token is required to fetch voice config");
-  }
+  try {
+    if (!token) {
+      throw new Error("Token is required to fetch voice config");
+    }
 
-  const personality = await prisma.personalityConfig.findFirst({
-    where: {
-      userToken: token,
-      isActive: true,
-    },
-  });
+    const personality = await prisma.personalityConfig.findFirst({
+      where: {
+        userToken: token,
+        isActive: true,
+      },
+    });
 
-  // 🔁 Fallback if no config exists (old tokens / safety)
-  if (!personality) {
+    // 🔁 Fallback if no config exists (old tokens / safety)
+    if (!personality) {
+      return {
+        voiceId: ELEVENLABS_VOICE_ID,
+        empathyLevel: "medium",
+        speakingSpeed: "normal",
+      };
+    }
+
     return {
-      voiceId: ELEVENLABS_VOICE_ID,
-      empathyLevel: "medium",
-      speakingSpeed: "normal",
+      voiceId: personality.voiceId || ELEVENLABS_VOICE_ID,
+
+      empathyLevel: personality.empathyLevel || "medium",
+
+      speakingSpeed: personality.speakingSpeed || "normal",
     };
+  } catch (err) {
+    console.log("getVoiceConfigForToken", err);
   }
-
-  return {
-    voiceId: personality.voiceId || ELEVENLABS_VOICE_ID,
-
-    empathyLevel: personality.empathyLevel || "medium",
-
-    speakingSpeed: personality.speakingSpeed || "normal",
-  };
 }
