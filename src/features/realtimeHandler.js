@@ -18,8 +18,13 @@ import prisma from "../lib/db.js";
 import { ingestConversationMessage } from "../utils/ingestConversationMessage.js";
 import { flushConversationToMemory } from "../services/flushConversationToMemory.js";
 import { getVoiceConfigForToken } from "../utils/getVoiceConfigForToken.js";
-import { deliverRemindersOnSessionStart } from "../services/reminderScheduler.js"; // 👈 NEW
 import { handleToolCall } from "../utils/toolHandlers.js";
+import {
+  clearReminderSession,
+  enqueueDueRemindersForSession,
+  markReminderSlotFreeForNextResponse,
+  maybeInjectNextReminder,
+} from "../services/reminderQueue.js";
 import {
   addRealtimeAudioChars,
   addRealtimeTokens,
@@ -147,8 +152,16 @@ export async function handleRealtimeAI(socket, token, timezone) {
     s.cooldownUntil = Date.now() + 5000;
   });
 
-  socket.on("trigger-reengagement", () => {
+  socket.on("trigger-reengagement", async () => {
     markReengagementTriggered(sessionId);
+
+    try {
+      // If any reminders are queued, inject exactly ONE so it can be spoken
+      // in this upcoming response.
+      await maybeInjectNextReminder(sessionId, token, gptWs);
+    } catch (err) {
+      logger.error(`❌ [${sessionId}] Reminder injection failed:`, err);
+    }
 
     gptWs.send(
       JSON.stringify({
@@ -213,7 +226,8 @@ export async function handleRealtimeAI(socket, token, timezone) {
 
         userMessageCount++;
         if (userMessageCount === REMINDER_TRIGGER_AFTER_MESSAGES) {
-          deliverRemindersOnSessionStart(token, socket, gptWs);
+          // Enqueue due reminders so we speak only ONE per assistant response
+          await enqueueDueRemindersForSession(token, sessionId, gptWs);
           console.log("Reminder triggered!!!!");
         }
 
@@ -316,6 +330,10 @@ export async function handleRealtimeAI(socket, token, timezone) {
       if (event.type === "response.done") {
         socket.emit("ai-response-done", { response: event.response });
         currentResponseId = null;
+
+        // Free the reminder slot so the next reminder (if queued) can be injected
+        // on the next response opportunity.
+        markReminderSlotFreeForNextResponse(sessionId);
 
         const usage = event.response?.usage;
         logger.info(
@@ -562,6 +580,9 @@ export async function handleRealtimeAI(socket, token, timezone) {
       gptWs.close();
       logger.info(`✅ [${sessionId}] GPT connection closed`);
     }
+
+    // Cleanup reminder queue state
+    clearReminderSession(sessionId);
 
     logger.info(`✅ [${sessionId}] Full cleanup complete`);
   });

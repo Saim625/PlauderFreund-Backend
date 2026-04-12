@@ -33,14 +33,4 @@ After mentioning it, continue the conversation normally. If the user responds th
       },
     }),
   );
-
-  // Step 2: Trigger GPT to respond immediately with the reminder
-  gptWs.send(
-    JSON.stringify({
-      type: "response.create",
-      response: {
-        output_modalities: ["text"],
-      },
-    }),
-  );
 }

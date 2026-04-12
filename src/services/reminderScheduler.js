@@ -1,9 +1,9 @@
 import cron from "node-cron";
 import prisma from "../lib/db.js";
 import { getAllSessions } from "./sessionStore.js";
-import { injectReminderIntoGPT } from "./reminderInjector.js";
 import logger from "../utils/logger.js";
 import { reschedule } from "../utils/rescheduleReminder.js";
+import { enqueueDueRemindersForSession } from "./reminderQueue.js";
 
 // ---------------------------------------------------------------------------
 // Core query — find all reminders that are due RIGHT NOW
@@ -81,11 +81,9 @@ async function deliverReminder(reminder, socket, gptWs) {
     return;
   }
 
-  injectReminderIntoGPT(gptWs, reminder);
-  await logDelivery(reminder.id, reminder.userToken, sessionId);
-  logger.info(
-    `🔔 Delivered reminder "${reminder.title}" to session ${sessionId}`,
-  );
+  // New behavior: enqueue due reminders so we inject ONE per assistant response.
+  // We still log "delivery" only when the reminder is actually injected.
+  await enqueueDueRemindersForSession(reminder.userToken, sessionId, gptWs);
 }
 
 // ---------------------------------------------------------------------------
@@ -95,20 +93,14 @@ async function deliverReminder(reminder, socket, gptWs) {
 
 export async function deliverRemindersOnSessionStart(token, socket, gptWs) {
   try {
-    const dueReminders = await getDueReminders(token);
-
-    if (!dueReminders.length) {
+    const result = await enqueueDueRemindersForSession(token, socket.id, gptWs);
+    if (!result.totalDue) {
       logger.info(`ℹ️ No due reminders for token ${token} at session start`);
       return;
     }
-
     logger.info(
-      `🔔 ${dueReminders.length} due reminder(s) found at session start for token ${token}`,
+      `🔔 ${result.totalDue} due reminder(s) found; enqueued ${result.enqueued} for token ${token}`,
     );
-
-    for (const reminder of dueReminders) {
-      await deliverReminder(reminder, socket, gptWs);
-    }
   } catch (err) {
     logger.error("❌ Session-start reminder delivery failed:", err);
   }
@@ -142,9 +134,12 @@ export function startReminderScheduler() {
           logger.warn(`⚠️ No gptWs found on socket for token ${token}`);
           continue;
         }
-
-        for (const reminder of dueReminders) {
-          await deliverReminder(reminder, socket, gptWs);
+        // New behavior: enqueue due reminders; injection is one-per-response.
+        const result = await enqueueDueRemindersForSession(token, socket.id, gptWs);
+        if (result.enqueued) {
+          logger.info(
+            `🔔 Enqueued ${result.enqueued}/${result.totalDue} due reminder(s) for token ${token}`,
+          );
         }
       } catch (err) {
         logger.error(

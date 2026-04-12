@@ -1,8 +1,16 @@
 import prisma from "../lib/db.js";
 import { handleReminderAcknowledgement } from "../services/reminderAcknowledgementHandler.js";
 import logger from "./logger.js";
+import { maybeInjectNextReminder } from "../services/reminderQueue.js";
 
-function sendToolResult(gptWs, callId, success = true, data = {}) {
+async function sendToolResult(
+  gptWs,
+  callId,
+  sessionId,
+  token,
+  success = true,
+  data = {},
+) {
   gptWs.send(
     JSON.stringify({
       type: "conversation.item.create",
@@ -14,6 +22,15 @@ function sendToolResult(gptWs, callId, success = true, data = {}) {
     }),
   );
 
+  // If a reminder is queued, inject ONE so it can be spoken in this response.
+  if (sessionId) {
+    try {
+      await maybeInjectNextReminder(sessionId, token, gptWs);
+    } catch (err) {
+      logger.error(`❌ [${sessionId}] Reminder injection failed:`, err);
+    }
+  }
+
   gptWs.send(
     JSON.stringify({
       type: "response.create",
@@ -22,21 +39,27 @@ function sendToolResult(gptWs, callId, success = true, data = {}) {
   );
 }
 
-async function handleAcknowledgeReminder(args, callId, sessionId, gptWs) {
+async function handleAcknowledgeReminder(args, callId, sessionId, token, gptWs) {
   const reminderId = Number(args.reminder_id);
   await handleReminderAcknowledgement(reminderId, sessionId);
-  sendToolResult(gptWs, callId);
+  await sendToolResult(gptWs, callId, sessionId, token);
   logger.info(`✅ Reminder ${reminderId} acknowledged`);
 }
 
-async function handleUpdatePersonalityPreference(args, callId, token, gptWs) {
+async function handleUpdatePersonalityPreference(
+  args,
+  callId,
+  sessionId,
+  token,
+  gptWs,
+) {
   const newPreference = args.new_preference?.trim();
 
   if (!newPreference) {
     logger.warn(
       "⚠️ update_personality_preferences called with empty preference",
     );
-    sendToolResult(gptWs, callId, false);
+    await sendToolResult(gptWs, callId, sessionId, token, false);
     return;
   }
 
@@ -46,7 +69,7 @@ async function handleUpdatePersonalityPreference(args, callId, token, gptWs) {
 
   if (!config) {
     logger.warn(`⚠️ No PersonalityConfig found for token ${token}`);
-    sendToolResult(gptWs, callId, false);
+    await sendToolResult(gptWs, callId, sessionId, token, false);
     return;
   }
 
@@ -55,7 +78,7 @@ async function handleUpdatePersonalityPreference(args, callId, token, gptWs) {
   // Avoid exact duplicates
   if (existing.includes(newPreference)) {
     logger.info(`ℹ️ Preference already exists, skipping: "${newPreference}"`);
-    sendToolResult(gptWs, callId);
+    await sendToolResult(gptWs, callId, sessionId, token);
     return;
   }
 
@@ -68,14 +91,14 @@ async function handleUpdatePersonalityPreference(args, callId, token, gptWs) {
   });
 
   logger.info(`✅ Preference saved for ${token}: "${newPreference}"`);
-  sendToolResult(gptWs, callId);
+  await sendToolResult(gptWs, callId, sessionId, token);
 }
 
-function handleGetCurrentTime(callId, timezone, gptWs) {
+async function handleGetCurrentTime(callId, sessionId, token, timezone, gptWs) {
   const now = new Date();
   const safeTimezone = timezone || "UTC";
 
-  sendToolResult(gptWs, callId, true, {
+  await sendToolResult(gptWs, callId, sessionId, token, true, {
     utc: now.toISOString(),
     timezone: safeTimezone,
     localTime: now.toLocaleString("de-DE", {
@@ -111,15 +134,21 @@ export async function handleToolCall(event, sessionId, token, gptWs, timezone) {
 
   switch (name) {
     case "acknowledge_reminder":
-      await handleAcknowledgeReminder(args, call_id, sessionId, gptWs);
+      await handleAcknowledgeReminder(args, call_id, sessionId, token, gptWs);
       break;
 
     case "update_personality_preferences":
-      await handleUpdatePersonalityPreference(args, call_id, token, gptWs);
+      await handleUpdatePersonalityPreference(
+        args,
+        call_id,
+        sessionId,
+        token,
+        gptWs,
+      );
       break;
 
     case "get_current_time":
-      handleGetCurrentTime(call_id, timezone, gptWs);
+      await handleGetCurrentTime(call_id, sessionId, token, timezone, gptWs);
       break;
 
     default:

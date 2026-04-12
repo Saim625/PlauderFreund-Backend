@@ -19,10 +19,7 @@ export async function ingestConversationMessage({ token, role, text }) {
     });
   } catch (err) {
     if (err.code === "P1001" || err.code === "P1002") {
-      console.error(
-        `⚠️ DB unreachable in ingestConversationMessage:`,
-        err.message,
-      );
+      console.error(`⚠️ DB unreachable in ingestConversationMessage:`, err);
       return;
     }
     console.error(`❌ Unexpected DB error in ingestConversationMessage:`, err);
