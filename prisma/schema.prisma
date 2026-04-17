@@ -14,6 +14,7 @@ model UserAccessToken {
   number    String?  @unique
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
+  lastActiveAt DateTime? @map("last_active_at") @db.Timestamptz
   reminders Reminder[]
   greetingHistory GreetingHistory[]
   sessionLogs     SessionLog[]   

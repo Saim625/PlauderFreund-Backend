@@ -454,6 +454,18 @@ export async function handleRealtimeAI(socket, token, timezone) {
   socket.on("disconnect", async () => {
     logger.info(`🔴 [${sessionId}] User disconnecting...`);
 
+    const disconnectedAt = new Date();
+    try {
+      await prisma.userAccessToken.update({
+        where: { token },
+        data: { lastActiveAt: disconnectedAt },
+      });
+    } catch (err) {
+      logger.warn(
+        `lastActiveAt update skipped [${sessionId}]: ${err?.message || err}`,
+      );
+    }
+
     try {
       // Flush conversation to memory
       await flushConversationToMemory(token, safeTimeZone, sessionId);
