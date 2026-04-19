@@ -236,11 +236,18 @@ model ProviderPricing {
   @@map("provider_pricing")
 }
 
+enum RecurrenceType {
+  one_time
+  monthly
+  yearly
+}
+
 model OperationalCost {
   id          Int      @id @default(autoincrement())
   label       String   // "server", "domain" etc
   costUsd     Float    @map("cost_usd")
-  month       DateTime @map("month") @db.Timestamptz
+  recurrence  RecurrenceType @default(one_time)
+  startDate   DateTime       @map("start_date") @db.Timestamptz 
   createdAt   DateTime @default(now()) @map("created_at")
 
   @@map("operational_costs")
