@@ -6,13 +6,42 @@ import { verifyAdminToken } from "../../middleware/verifyAdminToken.js";
 
 export const usageRouter = express.Router();
 
+function getCostForMonth(cost, requestedMonth) {
+  const start = new Date(cost.startDate);
+  const target = new Date(`${requestedMonth}-01`);
+
+  if (cost.recurrence === "one_time") {
+    return start.getFullYear() === target.getFullYear() &&
+      start.getMonth() === target.getMonth()
+      ? cost.costUsd
+      : 0;
+  }
+
+  if (cost.recurrence === "monthly") {
+    return start <= target ? cost.costUsd : 0;
+  }
+
+  if (cost.recurrence === "yearly") {
+    return start <= target ? cost.costUsd / 12 : 0;
+  }
+
+  return 0;
+}
+
 // ── HELPER — build date filter from query params ──────────────────────────────
 function buildDateFilter(from, to) {
   if (!from && !to) return undefined;
+
+  let toDate;
+  if (to) {
+    toDate = new Date(to);
+    toDate.setHours(23, 59, 59, 999); // end of the day
+  }
+
   return {
     startedAt: {
       ...(from ? { gte: new Date(from) } : {}),
-      ...(to ? { lte: new Date(to) } : {}),
+      ...(to ? { lte: toDate } : {}),
     },
   };
 }
@@ -224,21 +253,15 @@ usageRouter.get("/usage/platform", verifyAdminToken(), async (req, res) => {
     );
 
     // Get operational costs for the month
-    let opFilter = {};
-    if (month) {
-      const start = new Date(`${month}-01`);
-      const end = new Date(start);
-      end.setMonth(end.getMonth() + 1);
-      opFilter = { month: { gte: start, lt: end } };
-    }
+    const allOpCosts = await prisma.operationalCost.findMany();
 
-    const operationalCosts = await prisma.operationalCost.findMany({
-      where: opFilter,
-      orderBy: { month: "desc" },
-    });
+    const operationalCosts = allOpCosts.map((c) => ({
+      ...c,
+      applicableAmount: month ? getCostForMonth(c, month) : c.costUsd,
+    }));
 
     const totalOperationalCost = operationalCosts.reduce(
-      (sum, o) => sum + o.costUsd,
+      (sum, c) => sum + (c.applicableAmount || 0),
       0,
     );
     const grandTotal = apiCosts.totalApiCost + totalOperationalCost;
@@ -308,12 +331,12 @@ usageRouter.post(
   verifyAdminToken(),
   async (req, res) => {
     try {
-      const { label, costUsd, month } = req.body;
+      const { label, costUsd, recurrence, startDate } = req.body;
 
-      if (!label || !costUsd || !month) {
+      if (!label || !costUsd || !recurrence || !startDate) {
         return res.status(400).json({
           success: false,
-          message: "label, costUsd and month are required",
+          message: "label, costUsd, recurrence and startDate are required",
         });
       }
 
@@ -323,8 +346,21 @@ usageRouter.post(
           .json({ success: false, message: "Cost cannot be negative" });
       }
 
+      const VALID_RECURRENCES = ["one_time", "monthly", "yearly"];
+      if (!VALID_RECURRENCES.includes(recurrence)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid recurrence. Must be one_time, monthly or yearly",
+        });
+      }
+
       const record = await prisma.operationalCost.create({
-        data: { label, costUsd: parseFloat(costUsd), month: new Date(month) },
+        data: {
+          label,
+          costUsd: parseFloat(costUsd),
+          recurrence,
+          startDate: new Date(startDate),
+        },
       });
 
       res.json({ success: true, data: record });
@@ -341,20 +377,18 @@ usageRouter.get(
   verifyAdminToken(),
   async (req, res) => {
     try {
-      const { month } = req.query;
+      const { month } = req.query; // e.g. "2026-04"
 
-      let filter = {};
-      if (month) {
-        const start = new Date(`${month}-01`);
-        const end = new Date(start);
-        end.setMonth(end.getMonth() + 1);
-        filter = { month: { gte: start, lt: end } };
-      }
-
-      const costs = await prisma.operationalCost.findMany({
-        where: filter,
-        orderBy: { month: "desc" },
+      // Fetch all costs — filtering is done in JS not DB
+      const allCosts = await prisma.operationalCost.findMany({
+        orderBy: { startDate: "desc" },
       });
+
+      // If month provided, calculate applicable amount for each cost
+      const costs = allCosts.map((c) => ({
+        ...c,
+        applicableAmount: month ? getCostForMonth(c, month) : c.costUsd,
+      }));
 
       res.json({ success: true, data: costs });
     } catch (err) {
