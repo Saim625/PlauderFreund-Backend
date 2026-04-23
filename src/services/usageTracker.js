@@ -10,7 +10,11 @@ export function initSessionUsage(sessionId) {
     realtimeTextInputTokens: 0,
     realtimeAudioInputTokens: 0,
     realtimeCachedInputTokens: 0,
+    realtimeCachedAudioInputTokens: 0,
     realtimeOutputTokens: 0,
+
+    // Whisper transcription — tracked in seconds, converted to minutes for billing
+    whisperSeconds: 0,
 
     // Chat completion GPT (gpt-4o-mini) — greeting + facts/reminders
     chatInputTokens: 0,
@@ -24,15 +28,34 @@ export function initSessionUsage(sessionId) {
 
 export function addRealtimeTokens(
   sessionId,
-  inputTokens = 0,
+  inputTokenDetails = {},
   outputTokens = 0,
 ) {
   const usage = sessionUsage.get(sessionId);
   if (!usage) return;
-  usage.realtimeTextInputTokens += inputTokens.text_tokens || 0;
-  usage.realtimeAudioInputTokens += inputTokens.audio_tokens || 0;
-  usage.realtimeCachedInputTokens += inputTokens.cached_tokens || 0;
+
+  const textTokens = inputTokenDetails.text_tokens || 0;
+  const audioTokens = inputTokenDetails.audio_tokens || 0;
+  const cachedTextTokens =
+    inputTokenDetails.cached_tokens_details?.text_tokens || 0;
+  const cachedAudioTokens =
+    inputTokenDetails.cached_tokens_details?.audio_tokens || 0;
+
+  // Non-cached = total minus cached portion
+  usage.realtimeTextInputTokens += Math.max(0, textTokens - cachedTextTokens);
+  usage.realtimeAudioInputTokens += Math.max(
+    0,
+    audioTokens - cachedAudioTokens,
+  );
+  usage.realtimeCachedInputTokens += cachedTextTokens;
+  usage.realtimeCachedAudioInputTokens += cachedAudioTokens;
   usage.realtimeOutputTokens += outputTokens;
+}
+
+export function addWhisperSeconds(sessionId, seconds = 0) {
+  const usage = sessionUsage.get(sessionId);
+  if (!usage) return;
+  usage.whisperSeconds += seconds;
 }
 
 export function addChatTokens(sessionId, inputTokens = 0, outputTokens = 0) {

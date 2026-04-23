@@ -97,6 +97,10 @@ usageRouter.get(
             acc.totalRealtimeAudioInputTokens + s.realtimeAudioInputTokens,
           totalRealtimeCachedInputTokens:
             acc.totalRealtimeCachedInputTokens + s.realtimeCachedInputTokens,
+          totalRealtimeCachedAudioInputTokens:
+            acc.totalRealtimeCachedAudioInputTokens +
+            (s.realtimeCachedAudioInputTokens || 0),
+
           totalRealtimeOutputTokens:
             acc.totalRealtimeOutputTokens + s.realtimeOutputTokens,
           totalChatInputTokens: acc.totalChatInputTokens + s.chatInputTokens,
@@ -112,6 +116,7 @@ usageRouter.get(
           totalRealtimeTextInputTokens: 0,
           totalRealtimeAudioInputTokens: 0,
           totalRealtimeCachedInputTokens: 0,
+          totalRealtimeCachedAudioInputTokens: 0,
           totalRealtimeOutputTokens: 0,
           totalChatInputTokens: 0,
           totalChatOutputTokens: 0,

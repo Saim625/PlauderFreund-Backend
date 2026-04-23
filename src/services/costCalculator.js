@@ -44,7 +44,9 @@ export async function calculateSessionCost(usage = {}) {
       realtimeTextInputTokens: usage.realtimeTextInputTokens || 0,
       realtimeAudioInputTokens: usage.realtimeAudioInputTokens || 0,
       realtimeCachedInputTokens: usage.realtimeCachedInputTokens || 0,
+      realtimeCachedAudioInputTokens: usage.realtimeCachedAudioInputTokens || 0,
       realtimeOutputTokens: usage.realtimeOutputTokens || 0,
+      whisperSeconds: usage.whisperSeconds || 0,
       chatInputTokens: usage.chatInputTokens || 0,
       chatOutputTokens: usage.chatOutputTokens || 0,
       realtimeAudioChars: usage.realtimeAudioChars || 0,
@@ -58,7 +60,9 @@ export async function calculateSessionCost(usage = {}) {
       safeUsage.realtimeAudioInputTokens *
         getRate("openai_realtime", "audio_input_token") +
       safeUsage.realtimeCachedInputTokens *
-        getRate("openai_realtime", "cached_input_token") +
+        getRate("openai_realtime", "cached_text_input_token") +
+      safeUsage.realtimeCachedAudioInputTokens *
+        getRate("openai_realtime", "cached_audio_input_token") +
       safeUsage.realtimeOutputTokens *
         getRate("openai_realtime", "output_token");
 
@@ -66,6 +70,9 @@ export async function calculateSessionCost(usage = {}) {
     const chatGptCost =
       safeUsage.chatInputTokens * getRate("openai_chat", "input_token") +
       safeUsage.chatOutputTokens * getRate("openai_chat", "output_token");
+
+    const whisperCost =
+      (safeUsage.whisperSeconds / 60) * getRate("whisper", "per_minute");
 
     // 7. ElevenLabs cost (audio characters)
     const elevenlabsCost =
@@ -81,6 +88,7 @@ export async function calculateSessionCost(usage = {}) {
       data: {
         realtimeGptCost,
         chatGptCost,
+        whisperCost,
         elevenlabsCost,
         totalCost,
       },
@@ -94,6 +102,7 @@ export async function calculateSessionCost(usage = {}) {
       data: {
         realtimeGptCost: 0,
         chatGptCost: 0,
+        whisperCost: 0,
         elevenlabsCost: 0,
         totalCost: 0,
       },

@@ -180,7 +180,10 @@ model SessionLog {
   realtimeTextInputTokens   Int   @default(0) @map("realtime_text_input_tokens")
   realtimeAudioInputTokens  Int   @default(0) @map("realtime_audio_input_tokens")
   realtimeCachedInputTokens Int   @default(0) @map("realtime_cached_input_tokens")
+  realtimeCachedAudioInputTokens Int @default(0) @map("realtime_cached_audio_input_tokens")
   realtimeOutputTokens      Int   @default(0) @map("realtime_output_tokens")
+  
+  whisperSeconds                 Int @default(0) @map("whisper_seconds")
 
   // Chat completion usage (greeting + facts/reminders)
   chatInputTokens       Int      @default(0) @map("chat_input_tokens")
@@ -210,8 +213,10 @@ model UserUsageSummary {
   totalRealtimeTextInputTokens   Int @default(0) @map("total_realtime_text_input_tokens")
   totalRealtimeAudioInputTokens  Int @default(0) @map("total_realtime_audio_input_tokens")
   totalRealtimeCachedInputTokens Int @default(0) @map("total_realtime_cached_input_tokens")
+  totalRealtimeCachedAudioInputTokens Int @default(0) @map("total_realtime_cached_audio_input_tokens")
   totalRealtimeOutputTokens Int  @default(0) @map("total_realtime_output_tokens")
   totalChatInputTokens  Int      @default(0) @map("total_chat_input_tokens")
+  totalWhisperSeconds                 Int @default(0) @map("total_whisper_seconds")
   totalChatOutputTokens Int      @default(0) @map("total_chat_output_tokens")
   totalRealtimeAudioChars Int    @default(0) @map("total_realtime_audio_chars")
   totalGreetingAudioChars Int    @default(0) @map("total_greeting_audio_chars")

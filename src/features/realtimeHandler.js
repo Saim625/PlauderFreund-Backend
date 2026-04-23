@@ -28,6 +28,7 @@ import {
 import {
   addRealtimeAudioChars,
   addRealtimeTokens,
+  addWhisperSeconds,
   clearSessionUsage,
   getSessionUsage,
   initSessionUsage,
@@ -241,6 +242,10 @@ export async function handleRealtimeAI(socket, token, timezone) {
           role: "user",
           text: userTranscript,
         });
+
+        const wordCount = (event.transcript || "").trim().split(/\s+/).length;
+        const estimatedSeconds = Math.max(1, Math.round(wordCount * 0.46));
+        addWhisperSeconds(sessionId, estimatedSeconds);
       }
 
       // 🤖 AI response started
@@ -511,7 +516,10 @@ export async function handleRealtimeAI(socket, token, timezone) {
             realtimeTextInputTokens: usage.realtimeTextInputTokens,
             realtimeAudioInputTokens: usage.realtimeAudioInputTokens,
             realtimeCachedInputTokens: usage.realtimeCachedInputTokens,
+            realtimeCachedAudioInputTokens:
+              usage.realtimeCachedAudioInputTokens,
             realtimeOutputTokens: usage.realtimeOutputTokens,
+            whisperSeconds: usage.whisperSeconds, // 👈 new
             chatInputTokens: usage.chatInputTokens,
             chatOutputTokens: usage.chatOutputTokens,
             realtimeAudioChars: usage.realtimeAudioChars,
@@ -535,7 +543,10 @@ export async function handleRealtimeAI(socket, token, timezone) {
             totalRealtimeTextInputTokens: usage.realtimeTextInputTokens,
             totalRealtimeAudioInputTokens: usage.realtimeAudioInputTokens,
             totalRealtimeCachedInputTokens: usage.realtimeCachedInputTokens,
+            totalRealtimeCachedAudioInputTokens:
+              usage.realtimeCachedAudioInputTokens,
             totalRealtimeOutputTokens: usage.realtimeOutputTokens,
+            totalWhisperSeconds: usage.whisperSeconds,
             totalChatInputTokens: usage.chatInputTokens,
             totalChatOutputTokens: usage.chatOutputTokens,
             totalRealtimeAudioChars: usage.realtimeAudioChars,
@@ -554,9 +565,13 @@ export async function handleRealtimeAI(socket, token, timezone) {
             totalRealtimeCachedInputTokens: {
               increment: usage.realtimeCachedInputTokens,
             },
+            totalRealtimeCachedAudioInputTokens: {
+              increment: usage.realtimeCachedAudioInputTokens,
+            },
             totalRealtimeOutputTokens: {
               increment: usage.realtimeOutputTokens,
             },
+            totalWhisperSeconds: { increment: usage.whisperSeconds },
             totalChatInputTokens: { increment: usage.chatInputTokens },
             totalChatOutputTokens: { increment: usage.chatOutputTokens },
             totalRealtimeAudioChars: { increment: usage.realtimeAudioChars },
