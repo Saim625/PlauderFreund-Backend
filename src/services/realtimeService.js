@@ -126,27 +126,6 @@ ${personalityInstructions}
             tools: [
               {
                 type: "function",
-                name: "acknowledge_reminder",
-                description: `Call this when the user indicates they have completed, taken, or are aware of a reminder.
-                              This includes ANY of these patterns in ANY language:
-                              - Confirming completion: "I took it", "done", "already did it", "hab ich genommen", "ist erledigt", "hab ich schon"
-                              - Confirming awareness: "I know", "I remember", "ich weiß"  
-                              - Cancellation: "cancelled", "not needed", "abgesagt"
-                              - Past tense about the event: "I went", "I called", "ich war dort"`,
-                parameters: {
-                  type: "object",
-                  properties: {
-                    reminder_id: {
-                      type: "number",
-                      description:
-                        "The numeric ID of the reminder being acknowledged",
-                    },
-                  },
-                  required: ["reminder_id"],
-                },
-              },
-              {
-                type: "function",
                 name: "update_personality_preferences",
                 description:
                   "Call this when the user expresses a preference for how the AI should speak or behave. Examples: 'talk slower', 'be more professional', 'short answers only', 'act like a doctor'.",

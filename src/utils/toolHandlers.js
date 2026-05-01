@@ -1,5 +1,4 @@
 import prisma from "../lib/db.js";
-import { handleReminderAcknowledgement } from "../services/reminderAcknowledgementHandler.js";
 import logger from "./logger.js";
 import { maybeInjectNextReminder } from "../services/reminderQueue.js";
 
@@ -37,13 +36,6 @@ async function sendToolResult(
       response: { output_modalities: ["text"] },
     }),
   );
-}
-
-async function handleAcknowledgeReminder(args, callId, sessionId, token, gptWs) {
-  const reminderId = Number(args.reminder_id);
-  await handleReminderAcknowledgement(reminderId, sessionId);
-  await sendToolResult(gptWs, callId, sessionId, token);
-  logger.info(`✅ Reminder ${reminderId} acknowledged`);
 }
 
 async function handleUpdatePersonalityPreference(
@@ -133,10 +125,6 @@ export async function handleToolCall(event, sessionId, token, gptWs, timezone) {
   }
 
   switch (name) {
-    case "acknowledge_reminder":
-      await handleAcknowledgeReminder(args, call_id, sessionId, token, gptWs);
-      break;
-
     case "update_personality_preferences":
       await handleUpdatePersonalityPreference(
         args,
