@@ -19,7 +19,7 @@ function normalizeReminder(raw) {
     return isNaN(d.getTime()) ? null : d;
   };
 
-  return {
+  const reminder = {
     title: raw.title.trim(),
     description: raw.description?.trim() || null,
     reminderType: validTypes.includes(raw.reminder_type)
@@ -32,6 +32,24 @@ function normalizeReminder(raw) {
       ? raw.recurrence
       : "none",
   };
+
+  // After building the reminder object, add this safety check:
+  if (reminder.reminderType === "medication" && reminder.eventDatetime) {
+    const event = new Date(reminder.eventDatetime);
+    // If remindFrom is missing or wrong, fix it
+    if (!reminder.remindFrom || reminder.remindFrom >= event) {
+      reminder.remindFrom = new Date(event.getTime() - 60 * 60 * 1000); // 1 hour before
+    }
+    // If remindUntil is missing or same as event, fix it
+    if (
+      !reminder.remindUntil ||
+      Math.abs(reminder.remindUntil - event) < 60000
+    ) {
+      reminder.remindUntil = new Date(event.getTime() + 720 * 60 * 1000); // 12 hours after
+    }
+  }
+
+  return reminder;
 }
 
 // ---------------------------------------------------------------------------

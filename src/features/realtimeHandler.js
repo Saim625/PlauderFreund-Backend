@@ -362,6 +362,7 @@ export async function handleRealtimeAI(socket, token, timezone) {
       if (event.type === "response.function_call_arguments.done") {
         try {
           await handleToolCall(event, sessionId, token, gptWs, safeTimeZone);
+          console.log("Handle Tool call -> Called");
         } catch (err) {
           logger.error("❌ Tool call failed:", err);
         }

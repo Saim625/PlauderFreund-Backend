@@ -38,6 +38,133 @@ async function sendToolResult(
   );
 }
 
+async function handleGetUserReminders(args, callId, token, gptWs) {
+  try {
+    const { filter = "all", reminder_type = "all" } = args;
+    const now = new Date();
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    let whereClause = { userToken: token };
+
+    if (filter === "upcoming") {
+      // Active reminders whose window hasn't started or is currently active
+      whereClause = {
+        ...whereClause,
+        status: "active",
+        OR: [
+          { eventDatetime: { gte: now } },
+          { remindUntil: { gte: now } },
+          { eventDatetime: null },
+        ],
+      };
+    } else if (filter === "today") {
+      // Reminders relevant to today — either event is today OR window covers today
+      whereClause = {
+        ...whereClause,
+        OR: [
+          { eventDatetime: { gte: startOfDay, lte: endOfDay } },
+          {
+            AND: [
+              { remindFrom: { lte: endOfDay } },
+              { remindUntil: { gte: startOfDay } },
+            ],
+          },
+        ],
+      };
+    } else if (filter === "past") {
+      // Completed/expired OR active but window has passed (missed)
+      whereClause = {
+        ...whereClause,
+        OR: [
+          { status: { in: ["completed", "expired"] } },
+          {
+            AND: [{ status: "active" }, { remindUntil: { lt: now } }],
+          },
+        ],
+      };
+    }
+    // "all" = just userToken filter, returns everything
+
+    if (reminder_type !== "all") {
+      whereClause = { ...whereClause, reminderType: reminder_type };
+    }
+
+    const reminders = await prisma.reminder.findMany({
+      where: whereClause,
+      orderBy: { eventDatetime: "asc" },
+      take: 20,
+    });
+
+    // Determine display status — active but window passed = "missed"
+    const formatted = reminders.map((r) => {
+      let displayStatus = r.status;
+      if (
+        r.status === "active" &&
+        r.remindUntil &&
+        new Date(r.remindUntil) < now
+      ) {
+        displayStatus = "missed";
+      }
+
+      return {
+        id: r.id,
+        title: r.title,
+        type: r.reminderType,
+        status: displayStatus,
+        eventTime: r.eventDatetime,
+        remindFrom: r.remindFrom,
+        remindUntil: r.remindUntil,
+        recurrence: r.recurrence,
+        description: r.description,
+      };
+    });
+
+    const formattedText =
+      formatted.length === 0
+        ? "No reminders found."
+        : formatted
+            .map(
+              (r) =>
+                `- ${r.title} (${r.type}) | Status: ${r.status} | Event: ${r.eventTime ? new Date(r.eventTime).toLocaleString("de-DE") : "No specific date"} | Window: ${r.remindFrom ? new Date(r.remindFrom).toLocaleString("de-DE") : "—"} to ${r.remindUntil ? new Date(r.remindUntil).toLocaleString("de-DE") : "open"} | Repeats: ${r.recurrence}${r.description ? ` | Note: ${r.description}` : ""}`,
+            )
+            .join("\n");
+
+    gptWs.send(
+      JSON.stringify({
+        type: "conversation.item.create",
+        item: {
+          type: "function_call_output",
+          call_id: callId,
+          output:
+            formatted.length === 0
+              ? "No reminders found."
+              : `Found ${formatted.length} reminder(s):\n${formattedText}`,
+        },
+      }),
+    );
+
+    gptWs.send(
+      JSON.stringify({
+        type: "response.create",
+        response: { output_modalities: ["text"] },
+      }),
+    );
+
+    logger.info(
+      `📋 Fetched ${formatted.length} reminders for token ${token} (filter: ${filter})`,
+    );
+  } catch (err) {
+    logger.error("❌ Error fetching reminders:", err.message);
+    sendToolResult(gptWs, callId, false, {
+      summary: "Failed to fetch reminders.",
+    });
+  }
+}
+
 async function handleUpdatePersonalityPreference(
   args,
   callId,
@@ -125,6 +252,10 @@ export async function handleToolCall(event, sessionId, token, gptWs, timezone) {
   }
 
   switch (name) {
+    case "get_user_reminders":
+      await handleGetUserReminders(args, call_id, token, gptWs);
+      break;
+
     case "update_personality_preferences":
       await handleUpdatePersonalityPreference(
         args,

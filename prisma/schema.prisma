@@ -86,6 +86,7 @@ model MemorySummary {
 model PersonalityConfig {
   id                      Int      @id @default(autoincrement())
   userToken               String   @unique
+  avatarUrl               String? @map("avatar_url")
   voiceId                 String?
   speakingSpeed           String   @default("normal") // "slow", "normal", "fast"
   empathyLevel            String   @default("medium") // "low", "medium", "high"

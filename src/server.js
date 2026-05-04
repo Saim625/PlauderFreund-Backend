@@ -25,6 +25,9 @@ import {
 } from "./services/reminderScheduler.js";
 import { usageRouter } from "./routes/adminDashboardRoutes/usageRoutes.js";
 
+import path from "path";
+import { avatarRouter } from "./routes/avatarRoutes.js";
+
 const app = express();
 
 const corsOptions = {
@@ -51,6 +54,8 @@ app.use("/api", summaryEditorRouter);
 app.use("/api", personalityActionRouter);
 app.use("/api", adminPasswordRouter);
 app.use("/api", usageRouter);
+app.use("/api", avatarRouter);
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 const httpServer = createServer(app);
 

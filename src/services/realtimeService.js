@@ -126,6 +126,43 @@ ${personalityInstructions}
             tools: [
               {
                 type: "function",
+                name: "get_user_reminders",
+                description: `Call this when the user asks about their reminders, appointments, medications, or scheduled events.
+                Examples: 'Do I have any reminders?', 'What appointments do I have next week?', 'Did I miss any medication?', 'What reminders did I have last month?', 'Show me all my upcoming reminders'.
+              Use filter values:
+              - "upcoming": future reminders not yet delivered
+              - "today": reminders relevant to today
+              - "past": reminders that are completed, expired, or missed
+              - "all": ALWAYS use this when user says 'all reminders', 'show everything', or doesn't specify a time frame
+              Never guess — if unclear, use "all".
+                Always call this tool when the user asks about any scheduled or past reminder — never answer from memory.`,
+                parameters: {
+                  type: "object",
+                  properties: {
+                    filter: {
+                      type: "string",
+                      enum: ["upcoming", "today", "past", "all"],
+                      description:
+                        "What reminders to fetch based on user's question. 'upcoming' = future reminders, 'today' = today's reminders, 'past' = expired/completed reminders, 'all' = everything",
+                    },
+                    reminder_type: {
+                      type: "string",
+                      enum: [
+                        "medication",
+                        "appointment",
+                        "birthday",
+                        "general",
+                        "all",
+                      ],
+                      description:
+                        "Filter by reminder type if user specifies one, otherwise use 'all'",
+                    },
+                  },
+                  required: ["filter"],
+                },
+              },
+              {
+                type: "function",
                 name: "update_personality_preferences",
                 description:
                   "Call this when the user expresses a preference for how the AI should speak or behave. Examples: 'talk slower', 'be more professional', 'short answers only', 'act like a doctor'.",
