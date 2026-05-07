@@ -127,15 +127,37 @@ ${personalityInstructions}
               {
                 type: "function",
                 name: "get_user_reminders",
-                description: `Call this when the user asks about their reminders, appointments, medications, or scheduled events.
-                Examples: 'Do I have any reminders?', 'What appointments do I have next week?', 'Did I miss any medication?', 'What reminders did I have last month?', 'Show me all my upcoming reminders'.
-              Use filter values:
-              - "upcoming": future reminders not yet delivered
-              - "today": reminders relevant to today
-              - "past": reminders that are completed, expired, or missed
-              - "all": ALWAYS use this when user says 'all reminders', 'show everything', or doesn't specify a time frame
-              Never guess — if unclear, use "all".
-                Always call this tool when the user asks about any scheduled or past reminder — never answer from memory.`,
+                description: `Call this when the user asks about their reminders, appointments, medications, birthdays, or any scheduled events — in ANY language.
+                              IMPORTANT: Always call this tool for reminder/appointment questions. Never answer from memory or say "there are no reminders" without calling this tool first.
+
+                              Trigger examples (German):
+                              - "Habe ich heute Termine?"
+                              - "Welche Erinnerungen habe ich diese Woche?"
+                              - "Gibt es Erinnerungen für heute?"
+                              - "Was steht diese Woche an?"
+                              - "Habe ich irgendwelche Termine?"
+                              - "Welche Medikamente muss ich nehmen?"
+                              - "Habe ich einen Arzttermin?"
+                              - "Was sind meine Erinnerungen?"
+                              - "Zeig mir alle Termine"
+                              - "Habe ich etwas vergessen?"
+
+                              Trigger examples (English):
+                              - "Do I have any reminders?"
+                              - "What appointments do I have?"
+                              - "Any medication reminders?"
+                              - "What's scheduled for today?"
+                              - "Show me my reminders"
+
+                              These are example phrases only. The user may phrase their question differently — recognize the intent, not the exact words. Any question about scheduled events, appointments, medications, birthdays, or things to remember should trigger this tool.
+
+                              Filter rules:
+                              - "today": user asks about today specifically
+                              - "upcoming": user asks about future, next week, this week
+                              - "past": user asks about missed, past, last week/month
+                              - "all": default — use this when unclear or user says "any reminders", "all reminders"
+
+                              When in doubt — ALWAYS call this tool with filter "all" rather than answering without data.`,
                 parameters: {
                   type: "object",
                   properties: {

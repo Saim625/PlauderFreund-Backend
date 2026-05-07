@@ -42,9 +42,12 @@ const upload = multer({
 // ── POST /api/user/avatar/:userToken ──────────────────────────────────────────
 avatarRouter.post(
   "/user/avatar/:userToken",
+
   verifyAdminToken(),
   upload.single("avatar"), // "avatar" is the form field name
   async (req, res) => {
+    console.log("UPLOAD HIT");
+
     try {
       const { userToken } = req.params;
 
