@@ -77,7 +77,7 @@ export async function handleRealtimeAI(socket, token, timezone) {
     let summaryText = "";
 
     const previousSummaries = await prisma.conversationSummary.findMany({
-      where: { token },
+      where: { userToken: token },
       orderBy: { sessionAt: "desc" },
       take: 2,
     });
