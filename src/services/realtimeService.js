@@ -15,7 +15,12 @@ import { buildOpenAIPrompt } from "./buildOpenAiPrompt.js";
  * @param {string} token
  * @returns {Promise<WebSocket>}
  */
-export async function connectToRealtimeAPI(summary = [], token, timezone) {
+export async function connectToRealtimeAPI(
+  summary = [],
+  summaryText = "",
+  token,
+  timezone,
+) {
   const userToken = await prisma.userAccessToken.findFirst({
     where: {
       token: token,
@@ -262,6 +267,36 @@ ${personalityInstructions}
                   {
                     type: "input_text",
                     text: `User memory (for internal context only, do not mention unless relevant):\n${memoryText}`,
+                  },
+                ],
+              },
+            }),
+          );
+        }
+
+        if (summaryText) {
+          ws.send(
+            JSON.stringify({
+              type: "conversation.item.create",
+              item: {
+                type: "message",
+                role: "system",
+                content: [
+                  {
+                    type: "input_text",
+                    text: `
+                      Recent session summaries for conversational continuity.
+
+                      Use these only when relevant to maintain natural continuity with the user.
+                      If the user asks things like:
+                      - "Where did we leave off?"
+                      - "What were we discussing?"
+                      - "Continue from before"
+
+                      then use this context naturally.
+
+                      ${summaryText}
+                      `,
                   },
                 ],
               },

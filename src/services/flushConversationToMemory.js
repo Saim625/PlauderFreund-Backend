@@ -127,7 +127,8 @@ Return ONLY this JSON. No explanation, no markdown:
 
 {
   "facts": [...],
-  "reminders": [...]
+  "reminders": [...],
+  "session_summary": "2-4 sentence summary of what was discussed in this conversation. Focus on topics covered, decisions made, emotional tone, and anything the user would want to continue next session. Write in past tense. Do not repeat facts or reminders — only summarize the conversation flow."
 }
 
 ---
@@ -163,6 +164,10 @@ Return ONLY this JSON. No explanation, no markdown:
 
     const facts = Array.isArray(parsed.facts) ? parsed.facts : [];
     const reminders = Array.isArray(parsed.reminders) ? parsed.reminders : [];
+    const sessionSummary =
+      typeof parsed.session_summary === "string"
+        ? parsed.session_summary.trim()
+        : null; // 👈 new
 
     // 5️⃣ Save facts
     if (facts.length > 0) {
@@ -170,6 +175,27 @@ Return ONLY this JSON. No explanation, no markdown:
       console.log(`✅ ${facts.length} facts stored`);
     } else {
       console.log("ℹ️ No new facts to store");
+    }
+
+    if (sessionSummary) {
+      await prisma.conversationSummary.create({
+        data: { userToken: token, summary: sessionSummary },
+      });
+
+      // Keep only last 2 — delete older ones
+      const allSummaries = await prisma.conversationSummary.findMany({
+        where: { userToken: token },
+        orderBy: { sessionAt: "desc" },
+      });
+
+      if (allSummaries.length > 2) {
+        const toDelete = allSummaries.slice(2).map((s) => s.id);
+        await prisma.conversationSummary.deleteMany({
+          where: { id: { in: toDelete } },
+        });
+      }
+
+      console.log(`✅ Session summary saved`);
     }
 
     // 6️⃣ Delete processed messages

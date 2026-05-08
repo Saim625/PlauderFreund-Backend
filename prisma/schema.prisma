@@ -19,6 +19,8 @@ model UserAccessToken {
   greetingHistory GreetingHistory[]
   sessionLogs     SessionLog[]   
   usageSummary    UserUsageSummary? 
+  conversationSummaries ConversationSummary[]
+
 }
 
 model AdminAccessToken {
@@ -81,6 +83,16 @@ model MemorySummary {
   createdAt DateTime            @default(now())
   updatedAt DateTime            @default(now())
   summary   MemorySummaryItem[]
+}
+
+model ConversationSummary {
+  id        Int      @id @default(autoincrement())
+  userToken String   @map("user_token")
+  summary   String   // GPT-generated summary of the session
+  sessionAt DateTime @default(now()) @map("session_at") @db.Timestamptz
+
+  user UserAccessToken @relation(fields: [userToken], references: [token])
+  @@map("conversation_summaries")
 }
 
 model PersonalityConfig {

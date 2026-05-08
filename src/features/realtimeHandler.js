@@ -33,7 +33,6 @@ import {
   getSessionUsage,
   initSessionUsage,
 } from "../services/usageTracker.js";
-import { sessionRegistry } from "../services/sessionRegistry.js";
 import { calculateSessionCost } from "../services/costCalculator.js";
 
 export async function handleRealtimeAI(socket, token, timezone) {
@@ -74,8 +73,31 @@ export async function handleRealtimeAI(socket, token, timezone) {
     });
     const summary = memory?.summary || [];
 
-    // 🔥 STEP 3: Connect to GPT Realtime API
-    gptWs = await connectToRealtimeAPI(summary, token, safeTimeZone);
+    // step 3 Load summary of previous sessions
+    let summaryText = "";
+
+    const previousSummaries = await prisma.conversationSummary.findMany({
+      where: { token },
+      orderBy: { sessionAt: "desc" },
+      take: 2,
+    });
+
+    if (previousSummaries.length > 0) {
+      summaryText = previousSummaries
+        .map(
+          (s, i) =>
+            `Session ${i === 0 ? "last" : "2 sessions ago"}: ${s.summary}`,
+        )
+        .join("\n\n");
+    }
+
+    // 🔥 STEP 4: Connect to GPT Realtime API
+    gptWs = await connectToRealtimeAPI(
+      summary,
+      summaryText,
+      token,
+      safeTimeZone,
+    );
     logger.info(`✅ [${sessionId}] GPT Realtime connected`);
     // ✅ NEW: Attach gptWs to socket so cron scheduler can access it mid-session
     socket.data = socket.data || {};

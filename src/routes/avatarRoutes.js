@@ -46,8 +46,6 @@ avatarRouter.post(
   verifyAdminToken(),
   upload.single("avatar"), // "avatar" is the form field name
   async (req, res) => {
-    console.log("UPLOAD HIT");
-
     try {
       const { userToken } = req.params;
 
