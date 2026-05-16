@@ -54,6 +54,12 @@ greetingRouter.post("/generate-greeting", async (req, res) => {
 
     const voiceConfig = await getVoiceConfigForToken(token);
 
+    const personalityConfig = await prisma.personalityConfig.findUnique({
+      where: { userToken: token },
+    });
+    const chatModel = personalityConfig?.chatModel || "gpt-4o-mini";
+    console.log("Chat model for greeting generation:", chatModel);
+
     const prompt = [
       {
         role: "system",
@@ -84,7 +90,7 @@ ${previousGreetingsText}`,
       content: greetingText,
       inputTokens,
       outputTokens,
-    } = await getGPTResponse(prompt);
+    } = await getGPTResponse(prompt, chatModel);
 
     greetingStore.set(token, greetingText);
 

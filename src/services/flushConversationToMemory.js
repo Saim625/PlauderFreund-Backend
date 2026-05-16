@@ -4,7 +4,12 @@ import { getGPTResponse } from "./gptService.js";
 import { parseAndSaveReminders } from "./reminderService.js"; // no longer calls GPT
 import { addChatTokens } from "./usageTracker.js";
 
-export async function flushConversationToMemory(token, timezone, sessionId) {
+export async function flushConversationToMemory(
+  token,
+  timezone,
+  sessionId,
+  chatModel = "gpt-4o-mini",
+) {
   try {
     console.log("🧠 Flushing conversation to memory:", token);
     const convo = await prisma.conversation.findUnique({
@@ -86,36 +91,74 @@ Extract anything the user mentioned that is a future task, appointment, medicati
 ### TIME CONTEXT
 - Current UTC Time: ${now.toISOString()}
 - User Timezone: ${safeTimezone}
-- User Local Time: ${now.toLocaleString("en-US", { timeZone: safeTimezone })}
+- Current local date and time: ${now.toLocaleString("en-US", { timeZone: safeTimezone })}
+- Current weekday: ${now.toLocaleDateString("en-US", { timeZone: safeTimezone, weekday: "long" })}
 
-All datetime fields must be ISO 8601 with correct offset for "${safeTimezone}". Never use UTC offset for user times.
+All datetime fields must be ISO 8601 with correct offset for "${safeTimezone}".
 
-### Rules:
-- Only extract from USER messages.
-- Do NOT invent details not clearly stated.
-- If a field cannot be determined, use null.
+### CRITICAL RULES — READ CAREFULLY:
 
-### remind_from / remind_until guidelines:
-- medication → remind_from: event_datetime MINUS 60 minutes, remind_until: event_datetime PLUS 720 minutes (12 hours after)
-- appointment → remind_from: 24 hours before event_datetime, remind_until: end of event day
-- birthday    → remind_from: 48 hours before event_datetime, remind_until: end of event day
-- general     → remind_from: now, remind_until: null
+**event_datetime is MANDATORY for medication and appointment reminders.**
+**remind_from and remind_until are MANDATORY whenever event_datetime is known.**
+**null is only acceptable for birthday (no year given) or completely vague general reminders with zero time information.**
 
-### Recurrence rules (apply these defaults per category):
+You MUST calculate datetimes — never leave them null when there is any time information available.
+
+### How to calculate event_datetime:
+
+**If user gives exact date and time:**
+Use it directly.
+
+**If user gives time but no date (e.g. "every day at 5pm", "my medication at 8am"):**
+Use today's date if the time has not passed yet. Use tomorrow if it has already passed today.
+
+**If user gives a weekday pattern (e.g. "every Monday and Wednesday at 3:45pm"):**
+- Create ONE reminder per day mentioned
+- Calculate the NEXT upcoming occurrence of that weekday from current date/time
+- Example: today is Saturday, appointment every Monday → event_datetime = next Monday
+- Title should include the day: "Hockey Montag", "Hockey Mittwoch"
+
+**If user gives a relative time (e.g. "tomorrow", "next Friday", "in two weeks"):**
+Calculate the exact date from current date/time context provided above.
+
+**If user gives only a month or vague future (e.g. "sometime in June"):**
+Use the first day of that month at 09:00 local time as a best estimate.
+
+**For recurring reminders — after calculating first occurrence:**
+Set recurrence field correctly. The system will automatically calculate future occurrences from there.
+
+### remind_from / remind_until — MANDATORY calculation:
+- medication  → remind_from: event_datetime MINUS 60 minutes, remind_until: event_datetime PLUS 720 minutes
+- appointment → remind_from: event_datetime MINUS 24 hours, remind_until: end of event day (23:59:59)
+- birthday    → remind_from: event_datetime MINUS 48 hours, remind_until: end of event day (23:59:59)
+- general     → remind_from: event_datetime MINUS 24 hours, remind_until: end of event day
+
+### Recurrence rules:
 - medication  → "daily" by default unless user says otherwise
-- appointment → "none" unless user says it repeats
+- appointment → "weekly" if user says specific weekdays, "none" for one-time
 - birthday    → "yearly" always
 - general     → "none" unless user says it repeats
 
 ### recurrence values: "none" | "daily" | "weekly" | "yearly"
 
-### Reminders output format (array of objects):
-- "title": short clear title
+### Weekday calculation rules — CRITICAL:
+Current date is ${now.toLocaleDateString("en-US", { timeZone: safeTimezone, weekday: "long", year: "numeric", month: "long", day: "numeric" })}.
+
+To find NEXT occurrence of a weekday:
+- If today is Thursday and appointment is Monday → next Monday is 4 days away (Thu→Fri→Sat→Sun→Mon)
+- If today is Thursday and appointment is Wednesday → next Wednesday is 6 days away
+- NEVER use tomorrow or day after as next weekday if that day is not the correct weekday
+- Always verify: count forward from today until you reach the correct day name
+
+Double-check your calculation before outputting event_datetime.
+
+### Output format — ALL fields required for medication and appointment:
+- "title": short clear title, include weekday for weekly recurring (e.g. "Hockey Montag")
 - "description": extra context or null
 - "reminder_type": "medication" | "appointment" | "birthday" | "general"
-- "event_datetime": ISO8601 with offset or null
-- "remind_from": ISO8601 with offset or null
-- "remind_until": ISO8601 with offset or null
+- "event_datetime": ISO8601 — REQUIRED for medication/appointment, null only if truly impossible
+- "remind_from": ISO8601 — REQUIRED whenever event_datetime is set
+- "remind_until": ISO8601 — REQUIRED whenever event_datetime is set
 - "recurrence": "none" | "daily" | "weekly" | "yearly"
 
 If no reminders found, return empty array [].
@@ -145,7 +188,7 @@ Return ONLY this JSON. No explanation, no markdown:
       content: raw,
       inputTokens,
       outputTokens,
-    } = await getGPTResponse([{ role: "user", content: prompt }]);
+    } = await getGPTResponse([{ role: "user", content: prompt }], chatModel);
 
     // Track chat token usage for this extraction call
     if (sessionId) {

@@ -44,6 +44,10 @@ export async function connectToRealtimeAPI(
       },
     });
   }
+  console.log(
+    "Personality config for realtime connection:",
+    personalityConfig.realtimeModel,
+  );
 
   const hasMemory = summary.length > 0;
 
@@ -117,7 +121,7 @@ ${personalityInstructions}
           type: "session.update",
           session: {
             type: "realtime",
-            model: "gpt-4o-realtime-preview",
+            model: personalityConfig.realtimeModel || "gpt-4o-realtime-preview",
             output_modalities: ["text"],
             audio: {
               input: {

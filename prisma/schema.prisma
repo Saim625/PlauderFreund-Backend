@@ -115,6 +115,10 @@ model PersonalityConfig {
   
   // Conversation guidelines (stored as JSON string or array)
   conversationGuidelines  String[] @default([])
+
+  // model selection
+  realtimeModel String @default("gpt-4o-realtime-preview") @map("realtime_model")
+  chatModel     String @default("gpt-4o-mini")             @map("chat_model")
   
   isActive                Boolean  @default(true)
   updatedBy               String?
@@ -212,6 +216,10 @@ model SessionLog {
   elevenlabsCost        Float    @default(0) @map("elevenlabs_cost")
   totalCost             Float    @default(0) @map("total_cost")
 
+  //model used
+  realtimeModelUsed String? @map("realtime_model_used")
+  chatModelUsed     String? @map("chat_model_used")
+
   createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz
   user                  UserAccessToken @relation(fields: [userToken], references: [token])
 
@@ -243,6 +251,7 @@ model UserUsageSummary {
 model ProviderPricing {
   id           Int      @id @default(autoincrement())
   provider     String   // "openai_realtime" | "openai_chat" | "elevenlabs"
+  model        String
   priceType    String   @map("price_type") // "input_token" | "output_token" | "audio_character"
   pricePerUnit Float    @map("price_per_unit") // USD per single unit
   unitSize     Int      @default(1) @map("unit_size") // per how many units
@@ -250,7 +259,7 @@ model ProviderPricing {
   updatedAt    DateTime @updatedAt @map("updated_at")
   createdAt    DateTime @default(now()) @map("created_at")
 
-  @@unique([provider, priceType])
+  @@unique([provider, model, priceType])
   @@map("provider_pricing")
 }
 

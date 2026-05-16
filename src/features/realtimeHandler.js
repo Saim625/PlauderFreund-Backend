@@ -482,6 +482,14 @@ export async function handleRealtimeAI(socket, token, timezone) {
   socket.on("disconnect", async () => {
     logger.info(`🔴 [${sessionId}] User disconnecting...`);
 
+    const config = await prisma.personalityConfig.findUnique({
+      where: { userToken: token },
+    });
+    const realtimeModel = config?.realtimeModel || "gpt-4o-realtime-preview";
+    console.log("REALTIME MODEL USED FOR COST CALCULATION:", realtimeModel);
+    const chatModel = config?.chatModel || "gpt-4o-mini";
+    console.log("CHAT MODEL USED FOR COST CALCULATION:", chatModel);
+
     const disconnectedAt = new Date();
     try {
       await prisma.userAccessToken.update({
@@ -496,7 +504,12 @@ export async function handleRealtimeAI(socket, token, timezone) {
 
     try {
       // Flush conversation to memory
-      await flushConversationToMemory(token, safeTimeZone, sessionId);
+      await flushConversationToMemory(
+        token,
+        safeTimeZone,
+        sessionId,
+        chatModel,
+      );
       logger.info(`✅ [${sessionId}] Memory flushed`);
     } catch (err) {
       logger.error(`❌ [${sessionId}] Memory flush failed:`, err);
@@ -512,7 +525,12 @@ export async function handleRealtimeAI(socket, token, timezone) {
 
       if (usage) {
         logger.info(`🔍 [${sessionId}] Calculating costs...`);
-        const result = await calculateSessionCost(usage);
+
+        const result = await calculateSessionCost(
+          usage,
+          realtimeModel,
+          chatModel,
+        );
         logger.info(`🔍 [${sessionId}] Cost result: ${JSON.stringify(result)}`);
 
         const costs = result.success
@@ -551,6 +569,8 @@ export async function handleRealtimeAI(socket, token, timezone) {
             chatGptCost: costs.chatGptCost,
             elevenlabsCost: costs.elevenlabsCost,
             totalCost: costs.totalCost,
+            realtimeModelUsed: realtimeModel, // 👈 add
+            chatModelUsed: chatModel,
           },
         });
 

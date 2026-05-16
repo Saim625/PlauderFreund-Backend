@@ -5,7 +5,6 @@ import prisma from "../lib/db.js";
 // ---------------------------------------------------------------------------
 
 function normalizeReminder(raw) {
-  // title is the only truly required field — skip if missing
   if (!raw.title || typeof raw.title !== "string" || !raw.title.trim()) {
     return null;
   }
@@ -33,19 +32,58 @@ function normalizeReminder(raw) {
       : "none",
   };
 
-  // After building the reminder object, add this safety check:
-  if (reminder.reminderType === "medication" && reminder.eventDatetime) {
-    const event = new Date(reminder.eventDatetime);
-    // If remindFrom is missing or wrong, fix it
-    if (!reminder.remindFrom || reminder.remindFrom >= event) {
-      reminder.remindFrom = new Date(event.getTime() - 60 * 60 * 1000); // 1 hour before
+  // For medication and appointment — reject if event_datetime is missing
+  if (
+    ["medication", "appointment"].includes(reminder.reminderType) &&
+    !reminder.eventDatetime
+  ) {
+    console.warn(
+      `⚠️ Rejected reminder "${reminder.title}" — medication/appointment must have event_datetime`,
+    );
+    return null;
+  }
+
+  // Safety fix — if event_datetime exists but remind_from/until are missing, calculate them
+  if (reminder.eventDatetime) {
+    const event = reminder.eventDatetime;
+
+    if (reminder.reminderType === "medication") {
+      if (!reminder.remindFrom)
+        reminder.remindFrom = new Date(event.getTime() - 60 * 60 * 1000);
+      if (!reminder.remindUntil)
+        reminder.remindUntil = new Date(event.getTime() + 720 * 60 * 1000);
     }
-    // If remindUntil is missing or same as event, fix it
-    if (
-      !reminder.remindUntil ||
-      Math.abs(reminder.remindUntil - event) < 60000
-    ) {
-      reminder.remindUntil = new Date(event.getTime() + 720 * 60 * 1000); // 12 hours after
+
+    if (reminder.reminderType === "appointment") {
+      if (!reminder.remindFrom)
+        reminder.remindFrom = new Date(event.getTime() - 24 * 60 * 60 * 1000);
+      if (!reminder.remindUntil) {
+        const endOfDay = new Date(event);
+        endOfDay.setHours(23, 59, 59, 999);
+        reminder.remindUntil = endOfDay;
+      }
+    }
+
+    if (reminder.reminderType === "birthday") {
+      if (!reminder.remindFrom)
+        reminder.remindFrom = new Date(event.getTime() - 48 * 60 * 60 * 1000);
+      if (!reminder.remindUntil) {
+        const endOfDay = new Date(event);
+        endOfDay.setHours(23, 59, 59, 999);
+        reminder.remindUntil = endOfDay;
+      }
+    }
+    if (reminder.reminderType === "general" && reminder.eventDatetime) {
+      if (!reminder.remindFrom) {
+        reminder.remindFrom = new Date(
+          reminder.eventDatetime.getTime() - 24 * 60 * 60 * 1000,
+        ); // 24 hours before
+      }
+      if (!reminder.remindUntil) {
+        const endOfDay = new Date(reminder.eventDatetime);
+        endOfDay.setHours(23, 59, 59, 999);
+        reminder.remindUntil = endOfDay;
+      }
     }
   }
 

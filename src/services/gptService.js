@@ -5,10 +5,10 @@ const client = new OpenAI({
   apiKey: OPENAI_API_KEY,
 });
 
-export async function getGPTResponse(messages) {
+export async function getGPTResponse(messages, model = "gpt-4o-mini") {
   try {
     const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini", // fast + cheap, great for summarization
+      model, // fast + cheap, great for summarization
       messages,
       temperature: 0.3, // keep responses consistent
     });

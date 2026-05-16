@@ -6,36 +6,37 @@ import prisma from "../lib/db.js";
  * Calculates session cost in USD based on usage + DB pricing
  * NOTE: No rounding here — keep raw precision for billing accuracy
  */
-export async function calculateSessionCost(usage = {}) {
+export async function calculateSessionCost(
+  usage = {},
+  realtimeModel = "gpt-4o-realtime-preview",
+  chatModel = "gpt-4o-mini",
+) {
   try {
     // 1. Fetch pricing from DB
     const pricingRows = await prisma.providerPricing.findMany();
 
-    // 2. Build a fast lookup map: "provider_priceType" -> rate per unit
+    // Build lookup map: "provider_model_priceType" → rate per unit
     const pricingMap = new Map();
-
     for (const row of pricingRows) {
       if (!row.unitSize || row.unitSize === 0) {
         throw new Error(
-          `Invalid unitSize for ${row.provider}:${row.priceType}`,
+          `Invalid unitSize for ${row.provider}:${row.model}:${row.priceType}`,
         );
       }
-
-      const key = `${row.provider}_${row.priceType}`;
-      const ratePerUnit = row.pricePerUnit / row.unitSize;
-
-      pricingMap.set(key, ratePerUnit);
+      pricingMap.set(
+        `${row.provider}_${row.model}_${row.priceType}`,
+        row.pricePerUnit / row.unitSize,
+      );
     }
 
-    // 3. Helper to safely get rate
-    const getRate = (provider, priceType) => {
-      const key = `${provider}_${priceType}`;
+    const getRate = (provider, model, priceType) => {
+      const key = `${provider}_${model}_${priceType}`;
       const rate = pricingMap.get(key);
-
       if (rate === undefined) {
-        throw new Error(`Missing pricing for ${provider}:${priceType}`);
+        throw new Error(
+          `Missing pricing for ${provider}:${model}:${priceType}`,
+        );
       }
-
       return rate;
     };
 
@@ -56,28 +57,31 @@ export async function calculateSessionCost(usage = {}) {
     // 5. Realtime GPT cost (e.g., gpt-4o-realtime)
     const realtimeGptCost =
       safeUsage.realtimeTextInputTokens *
-        getRate("openai_realtime", "text_input_token") +
+        getRate("openai_realtime", realtimeModel, "text_input_token") +
       safeUsage.realtimeAudioInputTokens *
-        getRate("openai_realtime", "audio_input_token") +
+        getRate("openai_realtime", realtimeModel, "audio_input_token") +
       safeUsage.realtimeCachedInputTokens *
-        getRate("openai_realtime", "cached_text_input_token") +
+        getRate("openai_realtime", realtimeModel, "cached_text_input_token") +
       safeUsage.realtimeCachedAudioInputTokens *
-        getRate("openai_realtime", "cached_audio_input_token") +
+        getRate("openai_realtime", realtimeModel, "cached_audio_input_token") +
       safeUsage.realtimeOutputTokens *
-        getRate("openai_realtime", "output_token");
+        getRate("openai_realtime", realtimeModel, "output_token");
 
     // 6. Chat GPT cost (e.g., gpt-4o-mini)
     const chatGptCost =
-      safeUsage.chatInputTokens * getRate("openai_chat", "input_token") +
-      safeUsage.chatOutputTokens * getRate("openai_chat", "output_token");
+      safeUsage.chatInputTokens *
+        getRate("openai_chat", chatModel, "input_token") +
+      safeUsage.chatOutputTokens *
+        getRate("openai_chat", chatModel, "output_token");
 
     const whisperCost =
-      (safeUsage.whisperSeconds / 60) * getRate("whisper", "per_minute");
+      (safeUsage.whisperSeconds / 60) *
+      getRate("whisper", "whisper-1", "per_minute");
 
     // 7. ElevenLabs cost (audio characters)
     const elevenlabsCost =
       (safeUsage.realtimeAudioChars + safeUsage.greetingAudioChars) *
-      getRate("elevenlabs", "audio_character");
+      getRate("elevenlabs", "default", "audio_character");
 
     // 8. Total cost
     const totalCost = realtimeGptCost + chatGptCost + elevenlabsCost;
