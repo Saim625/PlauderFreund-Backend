@@ -139,7 +139,7 @@ ${personalityInstructions}
               {
                 type: "function",
                 name: "get_user_reminders",
-                description: `Call this when the user asks about their reminders, appointments, medications, birthdays, or any scheduled events — in ANY language. Make sure to tell reminders time according to users local time zone.
+                description: `Call this when the user asks about their reminders, appointments, medications, birthdays, or any scheduled events — in ANY language. Reminders come with UTC event_timedate from database, use user timezone to convert it into that and then forward.
                               IMPORTANT: Always call this tool for reminder/appointment questions. Never answer from memory or say "there are no reminders" without calling this tool first.
 
                               Trigger examples (German):

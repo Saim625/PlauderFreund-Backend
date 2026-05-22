@@ -57,6 +57,7 @@ Extract only important, lasting facts about the user.
 
 ### Rules:
 - Only extract from USER messages. ASSISTANT messages are context only.
+- If a fact only appears because the assistant mentioned it — do NOT extract it
 - Do NOT extract reminders, tasks, appointments, or anything time-sensitive into facts.
 - Do NOT repeat facts that already exist and are unchanged.
 - Do NOT invent or infer anything not clearly stated by the user.
@@ -102,6 +103,13 @@ All datetime fields must be ISO 8601 with correct offset for "${safeTimezone}".
 **remind_from and remind_until are MANDATORY whenever event_datetime is known.**
 
 You MUST calculate datetimes — never leave them null when there is any time information available.
+
+### CRITICAL RULES FOR REMINDER EXTRACTION:
+- ONLY extract reminders from lines starting with "USER:"
+- COMPLETELY IGNORE any lines starting with "ASSISTANT:"
+- If reminder information only appears in ASSISTANT messages and NOT in USER messages — do NOT extract it
+- The assistant may repeat or mention reminders during conversation — this does NOT count as the user providing reminder information
+- Only extract if the USER explicitly mentioned the reminder themselves in their own words
 
 ### How to calculate event_datetime:
 
