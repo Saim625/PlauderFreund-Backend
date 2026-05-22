@@ -58,13 +58,9 @@ export async function handleRealtimeAI(socket, token, timezone) {
   const voiceConfig = await getVoiceConfigForToken(token);
 
   try {
-    // 🔥 STEP 1: Initialize ElevenLabs for THIS user
-    // TODO: Get voiceId from user preferences/token
-
     const voiceId = voiceConfig.voiceId; // Replace with dynamic voiceId from user config
 
     elevenConnection = await initElevenLabsForUser(sessionId, voiceId, socket);
-    logger.info(`✅ [${sessionId}] ElevenLabs initialized`);
 
     // 🔥 STEP 2: Load memory
     const memory = await prisma.memorySummary.findUnique({
@@ -98,14 +94,12 @@ export async function handleRealtimeAI(socket, token, timezone) {
       token,
       safeTimeZone,
     );
-    logger.info(`✅ [${sessionId}] GPT Realtime connected`);
+
     // ✅ NEW: Attach gptWs to socket so cron scheduler can access it mid-session
     socket.data = socket.data || {};
     socket.data.gptWs = gptWs;
 
     initSessionUsage(sessionId);
-    logger.info(`🔍 [${sessionId}] Session usage initialized`);
-
     attachGPTListeners();
 
     async function reconnectGPT() {
@@ -153,15 +147,13 @@ export async function handleRealtimeAI(socket, token, timezone) {
       }
     }
   } catch (err) {
+    console.error("❌ FULL ERROR in handleRealtimeAI try block:", err);
+    console.error("❌ Stack:", err.stack);
     logger.error(`❌ [${sessionId}] Initialization failed:`, err);
     socket.emit("ai-error", {
       message: "AI connection failed: " + err.message,
     });
-
-    // Cleanup on error
-    if (elevenConnection) {
-      cleanupUserConnection(sessionId);
-    }
+    if (elevenConnection) cleanupUserConnection(sessionId);
     return;
   }
 
@@ -169,6 +161,7 @@ export async function handleRealtimeAI(socket, token, timezone) {
     const s = sessions.get(sessionId);
     if (!s) return;
 
+    console.log("S :", s);
     s.conversationActive = true;
     s.lastUserAudioAt = Date.now();
     s.lastAiPlaybackFinishedAt = Date.now();
@@ -423,7 +416,6 @@ export async function handleRealtimeAI(socket, token, timezone) {
   socket.on("audio-chunk", (chunkArrayBuffer) => {
     try {
       const base64Audio = Buffer.from(chunkArrayBuffer).toString("base64");
-
       gptWs.send(
         JSON.stringify({
           type: "input_audio_buffer.append",
@@ -480,15 +472,11 @@ export async function handleRealtimeAI(socket, token, timezone) {
 
   // 🔌 User disconnected
   socket.on("disconnect", async () => {
-    logger.info(`🔴 [${sessionId}] User disconnecting...`);
-
     const config = await prisma.personalityConfig.findUnique({
       where: { userToken: token },
     });
-    const realtimeModel = config?.realtimeModel || "gpt-4o-realtime-preview";
-    console.log("REALTIME MODEL USED FOR COST CALCULATION:", realtimeModel);
+    const realtimeModel = config?.realtimeModel || "gpt-realtime-mini";
     const chatModel = config?.chatModel || "gpt-4o-mini";
-    console.log("CHAT MODEL USED FOR COST CALCULATION:", chatModel);
 
     const disconnectedAt = new Date();
     try {
@@ -510,7 +498,6 @@ export async function handleRealtimeAI(socket, token, timezone) {
         sessionId,
         chatModel,
       );
-      logger.info(`✅ [${sessionId}] Memory flushed`);
     } catch (err) {
       logger.error(`❌ [${sessionId}] Memory flush failed:`, err);
     }
@@ -519,9 +506,7 @@ export async function handleRealtimeAI(socket, token, timezone) {
       const endedAt = new Date();
       const durationSeconds = Math.round((endedAt - sessionStartedAt) / 1000);
 
-      logger.info(`🔍 [${sessionId}] Looking up session usage...`);
       const usage = getSessionUsage(sessionId);
-      logger.info(`🔍 [${sessionId}] Usage found: ${JSON.stringify(usage)}`);
 
       if (usage) {
         logger.info(`🔍 [${sessionId}] Calculating costs...`);

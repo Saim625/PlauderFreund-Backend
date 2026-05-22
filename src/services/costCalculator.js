@@ -8,7 +8,7 @@ import prisma from "../lib/db.js";
  */
 export async function calculateSessionCost(
   usage = {},
-  realtimeModel = "gpt-4o-realtime-preview",
+  realtimeModel = "gpt-realtime-mini",
   chatModel = "gpt-4o-mini",
 ) {
   try {

@@ -49,6 +49,9 @@ export async function connectToRealtimeAPI(
     personalityConfig.realtimeModel,
   );
 
+  const realtimeModel = personalityConfig?.realtimeModel || "gpt-realtime-mini";
+  const realtimeWsUrl = `${OPENAI_REALTIME_API.replace(/\/$/, "")}?model=${encodeURIComponent(realtimeModel)}`;
+
   const hasMemory = summary.length > 0;
 
   const structuredMemory = summary.reduce((acc, item) => {
@@ -102,7 +105,7 @@ ${personalityInstructions}
   `.trim();
 
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(OPENAI_REALTIME_API, {
+    const ws = new WebSocket(realtimeWsUrl, {
       headers: { Authorization: `Bearer ${OPENAI_API_KEY}` },
     });
 
@@ -121,7 +124,7 @@ ${personalityInstructions}
           type: "session.update",
           session: {
             type: "realtime",
-            model: personalityConfig.realtimeModel || "gpt-4o-realtime-preview",
+            model: realtimeModel,
             output_modalities: ["text"],
             audio: {
               input: {
@@ -233,6 +236,14 @@ ${personalityInstructions}
         data = JSON.parse(msg.toString());
       } catch {
         return;
+      }
+
+      console.log("Realtime raw:", msg.toString());
+
+      if (data.type === "error") {
+        logger.error("Realtime API error:", data);
+
+        ws.close();
       }
 
       /* ---- Model is ready ---- */

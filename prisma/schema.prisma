@@ -117,7 +117,7 @@ model PersonalityConfig {
   conversationGuidelines  String[] @default([])
 
   // model selection
-  realtimeModel String @default("gpt-4o-realtime-preview") @map("realtime_model")
+  realtimeModel String @default("gpt-realtime-mini") @map("realtime_model")
   chatModel     String @default("gpt-4o-mini")             @map("chat_model")
   
   isActive                Boolean  @default(true)

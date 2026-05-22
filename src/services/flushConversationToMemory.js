@@ -98,9 +98,8 @@ All datetime fields must be ISO 8601 with correct offset for "${safeTimezone}".
 
 ### CRITICAL RULES — READ CAREFULLY:
 
-**event_datetime is MANDATORY for medication and appointment reminders.**
+**event_datetime is MANDATORY for all types of reminders.**
 **remind_from and remind_until are MANDATORY whenever event_datetime is known.**
-**null is only acceptable for birthday (no year given) or completely vague general reminders with zero time information.**
 
 You MUST calculate datetimes — never leave them null when there is any time information available.
 
@@ -116,7 +115,6 @@ Use today's date if the time has not passed yet. Use tomorrow if it has already 
 - Create ONE reminder per day mentioned
 - Calculate the NEXT upcoming occurrence of that weekday from current date/time
 - Example: today is Saturday, appointment every Monday → event_datetime = next Monday
-- Title should include the day: "Hockey Montag", "Hockey Mittwoch"
 
 **If user gives a relative time (e.g. "tomorrow", "next Friday", "in two weeks"):**
 Calculate the exact date from current date/time context provided above.
@@ -153,7 +151,7 @@ To find NEXT occurrence of a weekday:
 Double-check your calculation before outputting event_datetime.
 
 ### Output format — ALL fields required for medication and appointment:
-- "title": short clear title, include weekday for weekly recurring (e.g. "Hockey Montag")
+- "title": short clear title, include weekday for weekly recurring (e.g. "Hockey Match Monday")
 - "description": extra context or null
 - "reminder_type": "medication" | "appointment" | "birthday" | "general"
 - "event_datetime": ISO8601 — REQUIRED for medication/appointment, null only if truly impossible
