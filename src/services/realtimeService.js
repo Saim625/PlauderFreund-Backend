@@ -139,7 +139,7 @@ ${personalityInstructions}
               {
                 type: "function",
                 name: "get_user_reminders",
-                description: `Call this when the user asks about their reminders, appointments, medications, birthdays, or any scheduled events — in ANY language.
+                description: `Call this when the user asks about their reminders, appointments, medications, birthdays, or any scheduled events — in ANY language. Make sure to tell reminders time according to users local time zone.
                               IMPORTANT: Always call this tool for reminder/appointment questions. Never answer from memory or say "there are no reminders" without calling this tool first.
 
                               Trigger examples (German):
