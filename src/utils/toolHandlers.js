@@ -38,7 +38,7 @@ async function sendToolResult(
   );
 }
 
-async function handleGetUserReminders(args, callId, token, gptWs) {
+async function handleGetUserReminders(args, callId, token, gptWs, timezone) {
   try {
     const { filter = "all", reminder_type = "all" } = args;
     const now = new Date();
@@ -123,14 +123,21 @@ async function handleGetUserReminders(args, callId, token, gptWs) {
       };
     });
 
+    const safeTimezone = timezone || "UTC";
+
     const formattedText =
       formatted.length === 0
         ? "No reminders found."
         : formatted
-            .map(
-              (r) =>
-                `- ${r.title} (${r.type}) | Status: ${r.status} | Event: ${r.eventTime ? new Date(r.eventTime).toLocaleString("de-DE") : "No specific date"} | Window: ${r.remindFrom ? new Date(r.remindFrom).toLocaleString("de-DE") : "—"} to ${r.remindUntil ? new Date(r.remindUntil).toLocaleString("de-DE") : "open"} | Repeats: ${r.recurrence}${r.description ? ` | Note: ${r.description}` : ""}`,
-            )
+            .map((r) => {
+              const localTime = r.eventTime
+                ? new Date(r.eventTime).toLocaleString("de-DE", {
+                    timeZone: safeTimezone,
+                  })
+                : "No specific date";
+
+              return `- ${r.title} (${r.type}) | Status: ${r.status} | Event: ${localTime} (${safeTimezone}) | Repeats: ${r.recurrence}${r.description ? ` | Note: ${r.description}` : ""}`;
+            })
             .join("\n");
 
     gptWs.send(
@@ -158,7 +165,7 @@ async function handleGetUserReminders(args, callId, token, gptWs) {
       `📋 Fetched ${formatted.length} reminders for token ${token} (filter: ${filter})`,
     );
   } catch (err) {
-    logger.error("❌ Error fetching reminders:", err.message);
+    logger.error("❌ Error fetching reminders:", err);
     sendToolResult(gptWs, callId, false, {
       summary: "Failed to fetch reminders.",
     });
@@ -253,7 +260,7 @@ export async function handleToolCall(event, sessionId, token, gptWs, timezone) {
 
   switch (name) {
     case "get_user_reminders":
-      await handleGetUserReminders(args, call_id, token, gptWs);
+      await handleGetUserReminders(args, call_id, token, gptWs, timezone);
       break;
 
     case "update_personality_preferences":

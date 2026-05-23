@@ -104,12 +104,12 @@ All datetime fields must be ISO 8601 with correct offset for "${safeTimezone}".
 
 You MUST calculate datetimes — never leave them null when there is any time information available.
 
-### CRITICAL RULES FOR REMINDER EXTRACTION:
-- ONLY extract reminders from lines starting with "USER:"
-- COMPLETELY IGNORE any lines starting with "ASSISTANT:"
-- If reminder information only appears in ASSISTANT messages and NOT in USER messages — do NOT extract it
-- The assistant may repeat or mention reminders during conversation — this does NOT count as the user providing reminder information
-- Only extract if the USER explicitly mentioned the reminder themselves in their own words
+### CRITICAL — DO NOT EXTRACT FROM ASSISTANT MESSAGES:
+- ASSISTANT messages may contain reminder information that was fetched from the database and delivered to the user
+- This information already exists in the system — extracting it again will cause duplicate or corrupted reminders
+- ONLY extract reminders from USER messages
+- If the same reminder appears in both USER and ASSISTANT messages, only use the USER version
+- If a reminder ONLY appears in ASSISTANT messages — skip it entirely, do NOT extract it
 
 ### How to calculate event_datetime:
 
