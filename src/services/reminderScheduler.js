@@ -135,7 +135,11 @@ export function startReminderScheduler() {
           continue;
         }
         // New behavior: enqueue due reminders; injection is one-per-response.
-        const result = await enqueueDueRemindersForSession(token, socket.id, gptWs);
+        const result = await enqueueDueRemindersForSession(
+          token,
+          socket.id,
+          gptWs,
+        );
         if (result.enqueued) {
           logger.info(
             `🔔 Enqueued ${result.enqueued}/${result.totalDue} due reminder(s) for token ${token}`,
@@ -161,9 +165,10 @@ export function startReminderScheduler() {
 export function startReminderCleanup() {
   cron.schedule("0 0 * * *", async () => {
     const now = new Date();
+    logger.info("🧹 Running daily reminder cleanup...");
 
-    // One-time reminders whose window passed → expire them
-    await prisma.reminder.updateMany({
+    // One-time reminders whose remindUntil passed → expire them
+    const expireResult = await prisma.reminder.updateMany({
       where: {
         status: "active",
         recurrence: "none",
@@ -171,18 +176,20 @@ export function startReminderCleanup() {
       },
       data: { status: "expired" },
     });
+    logger.info(`🧹 Expired ${expireResult.count} one-time reminder(s)`);
 
-    // Recurring reminders whose window passed but NOT acknowledged → reschedule
-    const missedRecurring = await prisma.reminder.findMany({
+    // Recurring reminders → reschedule ALL of them at midnight regardless of window
+    const recurringReminders = await prisma.reminder.findMany({
       where: {
         status: "active",
         recurrence: { not: "none" },
-        remindUntil: { lt: now },
+        eventDatetime: { lt: now }, // only those whose event has already passed
       },
     });
 
-    for (const reminder of missedRecurring) {
-      const next = reschedule(reminder); // same function from reminderAcknowledgementHandler
+    let rescheduled = 0;
+    for (const reminder of recurringReminders) {
+      const next = reschedule(reminder);
       if (next) {
         await prisma.reminder.update({
           where: { id: reminder.id },
@@ -193,10 +200,13 @@ export function startReminderCleanup() {
             updatedAt: new Date(),
           },
         });
+        rescheduled++;
         logger.info(
-          `🔄 Missed recurring reminder "${reminder.title}" auto-rescheduled`,
+          `🔄 Rescheduled "${reminder.title}" → ${next.newEventDatetime?.toISOString()}`,
         );
       }
     }
+
+    logger.info(`🔄 Rescheduled ${rescheduled} recurring reminder(s)`);
   });
 }
