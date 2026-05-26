@@ -45,6 +45,7 @@ export async function handleRealtimeAI(socket, token, timezone) {
   let currentResponseId = null;
   let textChunkCount = 0;
   let lastProcessedContextId = null;
+  let voiceConfig;
 
   let userMessageCount = 0;
   const REMINDER_TRIGGER_AFTER_MESSAGES = 3;
@@ -265,7 +266,7 @@ export async function handleRealtimeAI(socket, token, timezone) {
           connection.closeContext();
         }
 
-        const newContextId = connection.startContext();
+        const newContextId = connection.startContext(voiceConfig);
 
         if (!newContextId) {
           logger.error(`❌ [${sessionId}] Failed to start audio context`);
@@ -565,7 +566,7 @@ export async function handleRealtimeAI(socket, token, timezone) {
   /* -------------------------------------------------------------------------- */
 
   try {
-    const voiceConfig = await getVoiceConfigForToken(token);
+    voiceConfig = await getVoiceConfigForToken(token);
 
     elevenConnection = await initElevenLabsForUser(
       sessionId,
