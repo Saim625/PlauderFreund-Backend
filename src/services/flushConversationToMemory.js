@@ -110,6 +110,7 @@ You MUST calculate datetimes — never leave them null when there is any time in
 - ONLY extract reminders from USER messages
 - If the same reminder appears in both USER and ASSISTANT messages, only use the USER version
 - If a reminder ONLY appears in ASSISTANT messages — skip it entirely, do NOT extract it
+- Dont update existing reminders until explicitly told to do so by the user.
 
 ### How to calculate event_datetime:
 

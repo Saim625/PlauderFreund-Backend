@@ -34,6 +34,12 @@ import {
   initSessionUsage,
 } from "../services/usageTracker.js";
 import { calculateSessionCost } from "../services/costCalculator.js";
+import {
+  createWebRtcSession,
+  destroyWebRtcSession,
+  getWebRtcSession,
+  registerWebRtcSocketHandlers,
+} from "../services/webrtcService.js";
 
 export async function handleRealtimeAI(socket, token, timezone) {
   /* -------------------------------------------------------------------------- */
@@ -62,6 +68,23 @@ export async function handleRealtimeAI(socket, token, timezone) {
   /* -------------------------------------------------------------------------- */
   /*                              HELPER FUNCTIONS                              */
   /* -------------------------------------------------------------------------- */
+
+  function appendAudioToGptBase64(base64Pcm) {
+    try {
+      if (!gptWs) return;
+      // ws (node) uses numeric readyState; 1 is OPEN in both browser and ws.
+      if (gptWs.readyState !== 1) return;
+
+      gptWs.send(
+        JSON.stringify({
+          type: "input_audio_buffer.append",
+          audio: base64Pcm,
+        }),
+      );
+    } catch (err) {
+      logger.error(`❌ [${sessionId}] Error forwarding audio to GPT:`, err);
+    }
+  }
 
   async function loadMemoryAndSummaries() {
     const memory = await prisma.memorySummary.findUnique({
@@ -581,6 +604,12 @@ export async function handleRealtimeAI(socket, token, timezone) {
     logger.info(`✅ [${sessionId}] GPT connected`);
 
     initSessionUsage(sessionId);
+
+    // WebRTC mic ingest (signaling still uses Socket.IO).
+    createWebRtcSession(socket, sessionId, {
+      onAudioBase64: appendAudioToGptBase64,
+    });
+    registerWebRtcSocketHandlers(socket, sessionId);
   } catch (err) {
     logger.error(`❌ [${sessionId}] Initialization failed:`, err);
 
@@ -633,14 +662,14 @@ export async function handleRealtimeAI(socket, token, timezone) {
 
   socket.on("audio-chunk", (chunkArrayBuffer) => {
     try {
+      const webrtc = getWebRtcSession(sessionId);
+      if (webrtc?.useWebRtcAudio) {
+        return;
+      }
+
       const base64Audio = Buffer.from(chunkArrayBuffer).toString("base64");
 
-      gptWs.send(
-        JSON.stringify({
-          type: "input_audio_buffer.append",
-          audio: base64Audio,
-        }),
-      );
+      appendAudioToGptBase64(base64Audio);
     } catch (err) {
       logger.error(`❌ [${sessionId}] Error forwarding audio to GPT:`, err);
     }
@@ -721,6 +750,8 @@ export async function handleRealtimeAI(socket, token, timezone) {
     } finally {
       clearSessionUsage(sessionId);
     }
+
+    destroyWebRtcSession(sessionId, "socket-disconnect");
 
     destroySession(sessionId);
 
