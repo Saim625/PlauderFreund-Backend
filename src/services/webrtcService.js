@@ -90,8 +90,7 @@ function normalizeIceCandidate(input) {
   // End-of-candidates or empty payload — ignore silently.
   if (!candidateStr) return null;
 
-  const sdpMid =
-    c.sdpMid != null && c.sdpMid !== "" ? String(c.sdpMid) : null;
+  const sdpMid = c.sdpMid != null && c.sdpMid !== "" ? String(c.sdpMid) : null;
 
   let sdpMLineIndex =
     c.sdpMLineIndex != null && c.sdpMLineIndex !== ""
@@ -191,7 +190,9 @@ export function createWebRtcSession(socket, sessionId, { onAudioBase64 } = {}) {
   pc.onicecandidate = (event) => {
     const serialized = serializeIceCandidate(event?.candidate);
     if (!serialized) return;
-    socket.emit("webrtc-ice-candidate", serialized);
+    socket.emit("webrtc-ice-candidate", {
+      candidate: serialized,
+    });
   };
 
   pc.oniceconnectionstatechange = () => {
@@ -279,7 +280,10 @@ export function createWebRtcSession(socket, sessionId, { onAudioBase64 } = {}) {
           }
 
           // Keep remainder for next callback.
-          if (acc.byteOffset === 0 && acc.byteLength === acc.buffer.byteLength) {
+          if (
+            acc.byteOffset === 0 &&
+            acc.byteLength === acc.buffer.byteLength
+          ) {
             // still backed by the same buffer, keep as-is
             session.pcm24kAcc = acc;
           } else {
@@ -440,4 +444,3 @@ export function registerWebRtcSocketHandlers(socket, sessionId) {
     destroyWebRtcSession(sessionId, "client-close");
   });
 }
-
