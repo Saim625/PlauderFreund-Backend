@@ -35,6 +35,7 @@ const corsOptions = {
     "https://plauderfreund.de",
     "http://localhost:5173",
     "capacitor://localhost", // 👈 iOS Capacitor
+    "https://localhost",
     "http://localhost",
   ], // 👈 Android Capacitor],
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
