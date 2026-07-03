@@ -40,6 +40,7 @@ import {
   getWebRtcSession,
   registerWebRtcSocketHandlers,
 } from "../services/webrtcService.js";
+import { createTtsAudioTransport } from "../services/ttsAudioTransport.js";
 
 export async function handleRealtimeAI(socket, token, timezone) {
   /* -------------------------------------------------------------------------- */
@@ -48,6 +49,7 @@ export async function handleRealtimeAI(socket, token, timezone) {
 
   let gptWs;
   let elevenConnection = null;
+  let ttsAudioTransport = null;
   let currentResponseId = null;
   let textChunkCount = 0;
   let lastProcessedContextId = null;
@@ -199,6 +201,7 @@ export async function handleRealtimeAI(socket, token, timezone) {
           );
 
           socket.emit("ai-interrupt");
+          ttsAudioTransport?.interrupt();
 
           if (currentResponseId) {
             gptWs.send(JSON.stringify({ type: "response.cancel" }));
@@ -591,10 +594,12 @@ export async function handleRealtimeAI(socket, token, timezone) {
   try {
     voiceConfig = await getVoiceConfigForToken(token);
 
+    ttsAudioTransport = createTtsAudioTransport(sessionId, socket);
+
     elevenConnection = await initElevenLabsForUser(
       sessionId,
       voiceConfig.voiceId,
-      socket,
+      { socket, audioTransport: ttsAudioTransport },
     );
 
     logger.info(`✅ [${sessionId}] ElevenLabs initialized`);

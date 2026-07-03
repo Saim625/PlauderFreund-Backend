@@ -23,6 +23,8 @@ function parseJsonEnv(value, fallback) {
 }
 
 export const WEBRTC_ENABLED = (process.env.WEBRTC_ENABLED || "true") === "true";
+export const WEBRTC_TTS_ENABLED =
+  (process.env.WEBRTC_TTS_ENABLED ?? "true") === "true";
 export const WEBRTC_SIGNALING_ROLE =
   process.env.WEBRTC_SIGNALING_ROLE || "caller";
 export const WEBRTC_ICE_SERVERS = parseJsonEnv(process.env.WEBRTC_ICE_SERVERS, [

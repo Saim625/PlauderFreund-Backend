@@ -18,10 +18,11 @@ const READY_TIMEOUT = 5000;
  * Connection class for each user
  */
 class ElevenLabsConnection {
-  constructor(userId, voiceId, socket) {
+  constructor(userId, voiceId, { socket, audioTransport }) {
     this.userId = userId;
     this.voiceId = voiceId;
     this.socket = socket;
+    this.audioTransport = audioTransport;
     this.ws = null;
     this.isReady = false;
     this.isConnecting = false;
@@ -142,28 +143,20 @@ class ElevenLabsConnection {
     if (msg.audio) {
       const cleanAudioBase64 = msg.audio.replace(/\s/g, "");
 
-      if (!global.chunkIndexMap) global.chunkIndexMap = new Map();
-      const currentIndex = global.chunkIndexMap.get(this.userId) || 0;
-      global.chunkIndexMap.set(this.userId, currentIndex + 1);
-
-      const audioObj = {
-        contextId: this.contextId,
-        index: currentIndex,
-        audio: cleanAudioBase64,
-        sentAt: Date.now(),
-        isFinal: msg.isFinal || false,
-      };
       markAiSpeaking(this.socket.id);
-      this.socket.emit("ai-audio-chunk", audioObj);
+      this.audioTransport.pushChunk({
+        contextId: this.contextId,
+        audio: cleanAudioBase64,
+        isFinal: msg.isFinal || false,
+      });
     }
 
     // Handle final chunk
     if (msg.isFinal === true) {
-      // 🔥 FIX: Capture contextId BEFORE it might be cleared
       const finalContextId = messageContextId || this.contextId;
 
       if (finalContextId) {
-        this.socket.emit("ai-audio-complete", { contextId: finalContextId });
+        this.audioTransport.pushComplete({ contextId: finalContextId });
         logger.info(
           `✅ [${this.userId}] Audio stream complete for context: ${finalContextId}`,
         );
@@ -186,7 +179,7 @@ class ElevenLabsConnection {
 
       logger.error(`❌ [${this.userId}] ElevenLabs error: ${errorDetail}`);
 
-      this.socket.emit("ai-error", {
+      this.audioTransport.pushError({
         message: "Audio generation error",
         error: errorDetail,
       });
@@ -416,7 +409,7 @@ class ElevenLabsConnection {
  * PUBLIC API FUNCTIONS
  */
 
-export async function initElevenLabsForUser(userId, voiceId, socket) {
+export async function initElevenLabsForUser(userId, voiceId, { socket, audioTransport }) {
   // Validate voiceId
   if (!voiceId || voiceId === "undefined") {
     logger.error(`❌ Invalid voiceId for user ${userId}: ${voiceId}`);
@@ -442,7 +435,10 @@ export async function initElevenLabsForUser(userId, voiceId, socket) {
   }
 
   // Create new connection
-  connection = new ElevenLabsConnection(userId, voiceId, socket);
+  connection = new ElevenLabsConnection(userId, voiceId, {
+    socket,
+    audioTransport,
+  });
   userConnections.set(userId, connection);
 
   // Connect

@@ -50,3 +50,12 @@ export function int16ToBase64Pcm(int16Samples) {
   return buf.toString("base64");
 }
 
+export function base64ToInt16(base64) {
+  const buf = Buffer.from(base64, "base64");
+  return new Int16Array(
+    buf.buffer,
+    buf.byteOffset,
+    Math.floor(buf.byteLength / 2),
+  );
+}
+

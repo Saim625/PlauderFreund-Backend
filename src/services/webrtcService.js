@@ -3,8 +3,10 @@ import {
   WEBRTC_ENABLED,
   WEBRTC_ICE_SERVERS,
   WEBRTC_SIGNALING_ROLE,
+  WEBRTC_TTS_ENABLED,
 } from "../config/env.js";
 import {
+  base64ToInt16,
   downmixToMonoInt16,
   int16ToBase64Pcm,
   resampleInt16Linear,
@@ -30,6 +32,151 @@ try {
 }
 
 const sessions = new Map(); // key: socket.id
+
+const TTS_OUT_SAMPLE_RATE = 48000;
+const TTS_FRAME_SAMPLES = 480; // 10ms @ 48kHz
+
+let frameCount = 0;
+
+function emitWebRtcTtsReady(socket, sessionId) {
+  socket.emit("webrtc-tts-ready", { sessionId });
+  logger.info(`🔊 [${sessionId}] WebRTC TTS outbound track ready`);
+}
+
+function attachTtsOutboundTrack(session) {
+  if (!WEBRTC_TTS_ENABLED || !wrtc?.nonstandard?.RTCAudioSource) {
+    return false;
+  }
+
+  if (session.ttsSource) {
+    return true;
+  }
+
+  try {
+    const source = new wrtc.nonstandard.RTCAudioSource();
+    const track = source.createTrack();
+    const stream = new wrtc.MediaStream();
+    stream.addTrack(track);
+    session.pc.addTrack(track, stream);
+
+    session.ttsSource = source;
+    session.ttsTrack = track;
+    session.ttsPcm48kAcc = new Int16Array(0);
+    session.ttsFrameQueue = [];
+    session.ttsPlaybackTimer = null;
+    session.useWebRtcTts = false;
+
+    logger.info(`🔊 [${session.sessionId}] TTS outbound track attached`);
+    return true;
+  } catch (err) {
+    logger.error(
+      `❌ [${session.sessionId}] Failed to attach TTS outbound track:`,
+      err,
+    );
+    return false;
+  }
+}
+
+function markWebRtcTtsReady(session) {
+  if (!session?.ttsSource) return;
+  if (session.useWebRtcTts) return;
+
+  session.useWebRtcTts = true;
+  emitWebRtcTtsReady(session.socket, session.sessionId);
+}
+
+export function pushTtsPcmToWebRtc(sessionId, base64Pcm) {
+  const session = sessions.get(sessionId);
+  if (!session?.ttsSource || !session.useWebRtcTts) {
+    return false;
+  }
+
+  try {
+    const pcm24k = base64ToInt16(base64Pcm);
+    const pcm48k = resampleInt16Linear(pcm24k, 24000, TTS_OUT_SAMPLE_RATE);
+
+    let acc = session.ttsPcm48kAcc;
+    if (acc.length === 0) {
+      acc = pcm48k;
+    } else {
+      const merged = new Int16Array(acc.length + pcm48k.length);
+      merged.set(acc, 0);
+      merged.set(pcm48k, acc.length);
+      acc = merged;
+    }
+
+    while (acc.length >= TTS_FRAME_SAMPLES) {
+      const frame = new Int16Array(acc.slice(0, TTS_FRAME_SAMPLES));
+
+      session.ttsFrameQueue.push(frame);
+
+      acc = acc.subarray(TTS_FRAME_SAMPLES);
+    }
+
+    if (session.ttsFrameQueue.length > 0 && !session.ttsPlaybackTimer) {
+      startTtsPlayback(session);
+    }
+
+    if (acc.byteOffset === 0 && acc.byteLength === acc.buffer.byteLength) {
+      session.ttsPcm48kAcc = acc;
+    } else {
+      session.ttsPcm48kAcc = new Int16Array(acc);
+    }
+
+    return true;
+  } catch (err) {
+    logger.error(`❌ [${sessionId}] pushTtsPcmToWebRtc failed:`, err);
+    return false;
+  }
+}
+
+function startTtsPlayback(session) {
+  if (session.ttsPlaybackTimer) {
+    return;
+  }
+
+  session.ttsPlaybackTimer = setInterval(() => {
+    if (session.ttsFrameQueue.length === 0) {
+      clearInterval(session.ttsPlaybackTimer);
+      session.ttsPlaybackTimer = null;
+      return;
+    }
+
+    const frame = session.ttsFrameQueue.shift();
+
+    session.ttsSource.onData({
+      samples: frame,
+      sampleRate: TTS_OUT_SAMPLE_RATE,
+      bitsPerSample: 16,
+      channelCount: 1,
+      numberOfFrames: frame.length,
+    });
+  }, 10);
+}
+
+export function interruptTtsWebRtc(sessionId) {
+  const session = sessions.get(sessionId);
+  if (!session) return;
+
+  session.ttsFrameQueue.length = 0;
+  session.ttsPcm48kAcc = new Int16Array(0);
+}
+
+function cleanupTtsTrack(session) {
+  session.ttsPcm48kAcc = new Int16Array(0);
+  session.useWebRtcTts = false;
+
+  if (session.ttsTrack) {
+    try {
+      session.ttsTrack.stop();
+    } catch {
+      // ignore
+    }
+    session.ttsTrack = null;
+  }
+
+  session.ttsSource = null;
+}
 
 function emitWebRtcError(socket, sessionId, payload) {
   socket.emit("webrtc-error", payload);
@@ -130,30 +277,40 @@ export function destroyWebRtcSession(sessionId, reason = "destroy") {
   sessions.delete(sessionId);
 
   try {
+    // ✅ Stop playback scheduler
+    if (s.ttsPlaybackTimer) {
+      clearInterval(s.ttsPlaybackTimer);
+      s.ttsPlaybackTimer = null;
+    }
+
+    // ✅ Clear queued audio
+    if (s.ttsFrameQueue) {
+      s.ttsFrameQueue.length = 0;
+    }
+
     if (s.audioSink) {
       try {
         s.audioSink.stop();
-      } catch {
-        // ignore
-      }
+      } catch {}
+
       s.audioSink = null;
     }
 
     if (s.audioTrack) {
       try {
         s.audioTrack.stop();
-      } catch {
-        // ignore
-      }
+      } catch {}
+
       s.audioTrack = null;
     }
+
+    cleanupTtsTrack(s);
 
     if (s.pc) {
       try {
         s.pc.close();
-      } catch {
-        // ignore
-      }
+      } catch {}
+
       s.pc = null;
     }
   } finally {
@@ -175,17 +332,24 @@ export function createWebRtcSession(socket, sessionId, { onAudioBase64 } = {}) {
     pc,
     socket,
     sessionId,
+    ttsFrameQueue: [],
+    ttsPlaybackTimer: null,
     role: WEBRTC_SIGNALING_ROLE,
     remoteDescriptionSet: false,
     pendingIceCandidates: [],
     audioSink: null,
     audioTrack: null,
     useWebRtcAudio: false,
+    useWebRtcTts: false,
+    ttsSource: null,
+    ttsTrack: null,
+    ttsPcm48kAcc: new Int16Array(0),
     pcm24kAcc: new Int16Array(0),
     onAudioBase64: typeof onAudioBase64 === "function" ? onAudioBase64 : null,
   };
 
   sessions.set(sessionId, session);
+  attachTtsOutboundTrack(session);
 
   pc.onicecandidate = (event) => {
     const serialized = serializeIceCandidate(event?.candidate);
@@ -331,8 +495,9 @@ export function registerWebRtcSocketHandlers(socket, sessionId) {
     }
 
     try {
-      // Ensure we can receive audio.
+      // Ensure we can receive mic audio and send TTS.
       s.pc.addTransceiver("audio", { direction: "recvonly" });
+      attachTtsOutboundTrack(s);
 
       const offer = await s.pc.createOffer();
       await s.pc.setLocalDescription(offer);
@@ -340,6 +505,8 @@ export function registerWebRtcSocketHandlers(socket, sessionId) {
       socket.emit("webrtc-offer", {
         sdp: serializeLocalDescription(s.pc.localDescription),
       });
+
+      markWebRtcTtsReady(s);
     } catch (err) {
       emitWebRtcError(socket, sessionId, {
         code: "CREATE_OFFER_FAILED",
@@ -355,7 +522,8 @@ export function registerWebRtcSocketHandlers(socket, sessionId) {
     if (!s) return;
 
     try {
-      // Browser offer already includes the mic m-line — do not add another transceiver.
+      attachTtsOutboundTrack(s);
+
       const descInit = normalizeSessionDescription(payload.sdp ?? payload);
       const desc = new wrtc.RTCSessionDescription(descInit);
       await s.pc.setRemoteDescription(desc);
@@ -372,6 +540,8 @@ export function registerWebRtcSocketHandlers(socket, sessionId) {
       socket.emit("webrtc-answer", {
         sdp: serializeLocalDescription(s.pc.localDescription),
       });
+
+      markWebRtcTtsReady(s);
     } catch (err) {
       s.remoteDescriptionSet = false;
       s.pendingIceCandidates.length = 0;
@@ -398,6 +568,8 @@ export function registerWebRtcSocketHandlers(socket, sessionId) {
       for (const candInit of s.pendingIceCandidates.splice(0)) {
         await s.pc.addIceCandidate(candInit);
       }
+
+      markWebRtcTtsReady(s);
     } catch (err) {
       emitWebRtcError(socket, sessionId, {
         code: "INVALID_SDP",
