@@ -17,12 +17,6 @@ export class RTPReceiver extends EventEmitter {
       // Strip 12-byte RTP header to get raw audio payload
       const audioPayload = RTPUtils.parseRTPPayload(msg);
 
-      console.log(
-        `📥 RTP packet received | ${msg.length} bytes | payload ${audioPayload.length} bytes`,
-      );
-
-      console.log(`📍 From ${rinfo.address}:${rinfo.port}`);
-
       if (audioPayload.length > 0) {
         /**
          * Emits audio payload + rinfo (so RTPSender knows Asterisk's dynamic return port)
