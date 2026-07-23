@@ -27,6 +27,7 @@ import { usageRouter } from "./routes/adminDashboardRoutes/usageRoutes.js";
 
 import path from "path";
 import { avatarRouter } from "./routes/avatarRoutes.js";
+import { initializeAriGateway } from "./telephony/ari/ariEvents.js";
 
 const app = express();
 
@@ -107,6 +108,11 @@ DB_CONNECTION()
   .catch((err) => {
     console.error("Database connection failed:", err);
   });
+
+// Boot the telephony module
+initializeAriGateway().catch((err) => {
+  console.error("Telephony initialization failed:", err);
+});
 
 // Graceful shutdown
 process.on("SIGTERM", async () => {

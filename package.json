@@ -14,6 +14,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@ipcom/asterisk-ari": "^1.0.0",
     "@prisma/client": "^6.19.2",
     "axios": "^1.13.2",
     "bcrypt": "^6.0.0",
