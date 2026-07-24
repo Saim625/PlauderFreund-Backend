@@ -24,13 +24,8 @@ export class CallSession {
 
   async answer() {
     try {
-      console.log(
-        `🔊 [Session ${this.channelId}] Answering call for ${this.user.number}...`,
-      );
-
       const channelController = ariClient.Channel(this.channelId);
       await channelController.answer();
-      console.log(`✅ [Session ${this.channelId}] Channel answered.`);
 
       // 1. Start listening for incoming audio packets
       this.rtpReceiver.start();
@@ -40,6 +35,7 @@ export class CallSession {
       this.rtpReceiver.on("audio", (pcmBuffer) => {
         if (this.externalMedia) {
           this.externalMedia.emit("audio", pcmBuffer);
+          console.log("➡️ Forwarding audio to ExternalMedia");
         }
       });
 

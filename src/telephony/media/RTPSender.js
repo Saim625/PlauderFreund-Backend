@@ -24,6 +24,9 @@ export class RTPSender {
    * @param {Buffer} audioBuffer
    */
   sendAudio(audioBuffer) {
+    console.log(
+      `📤 Sending RTP back to ${this.targetHost}:${this.targetPort} (${audioBuffer.length} bytes)`,
+    );
     if (!this.socket || !this.targetPort) return;
 
     const packet = RTPUtils.buildRTPPacket(

@@ -667,6 +667,7 @@ export async function handleRealtimeAI(socket, token, timezone) {
 
   socket.on("audio-chunk", (chunkArrayBuffer) => {
     try {
+      console.log("🤖 RealtimeHandler received audio");
       const webrtc = getWebRtcSession(sessionId);
       if (webrtc?.useWebRtcAudio) {
         return;

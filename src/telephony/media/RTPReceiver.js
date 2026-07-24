@@ -23,6 +23,7 @@ export class RTPReceiver extends EventEmitter {
          * @event RTPReceiver#audio
          */
         this.emit("audio", audioPayload, rinfo);
+        console.log("➡️ Emitting audio event");
       }
     });
 

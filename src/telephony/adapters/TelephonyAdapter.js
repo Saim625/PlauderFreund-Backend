@@ -13,11 +13,14 @@ export class TelephonySocketAdapter extends EventEmitter {
 
     // Receive 8kHz µ-law audio from Asterisk via ExternalMedia
     this.externalMedia.on("audio", (mulawBuffer) => {
+      console.log("🎤 TelephonySocketAdapter received audio");
+
       // Upsample 8kHz µ-law to 24kHz PCM for OpenAI
       const pcm24k = decodeMulawTo24kPcm(mulawBuffer);
 
       // Emit as base64 chunk matching the exact format realtimeHandler expects from Web clients
       this.emit("audio-chunk", pcm24k.toString("base64"));
+      console.log("📤 Sending audio-chunk to realtimeHandler");
     });
   }
 
