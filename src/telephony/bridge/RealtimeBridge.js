@@ -36,7 +36,7 @@ export class TelephonySocketAdapter extends EventEmitter {
       const mulawBuffer = encode24kPcmToMulaw(pcm24k);
 
       if (this.rtpSender) {
-        this.rtpSender.sendMulaw(mulawBuffer);
+        this.rtpSender.sendAudio(mulawBuffer);
       }
       return true;
     }

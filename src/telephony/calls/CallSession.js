@@ -35,7 +35,6 @@ export class CallSession {
       this.rtpReceiver.on("audio", (pcmBuffer) => {
         if (this.externalMedia) {
           this.externalMedia.emit("audio", pcmBuffer);
-          console.log("➡️ Forwarding audio to ExternalMedia");
         }
       });
 
