@@ -610,11 +610,15 @@ export async function handleRealtimeAI(socket, token, timezone) {
 
     initSessionUsage(sessionId);
 
-    // WebRTC mic ingest (signaling still uses Socket.IO).
-    createWebRtcSession(socket, sessionId, {
-      onAudioBase64: appendAudioToGptBase64,
-    });
-    registerWebRtcSocketHandlers(socket, sessionId);
+    const isTelephony = sessionId.startsWith("telephony_");
+
+    // WebRTC is browser-only; telephony uses the RTP adapter path.
+    if (!isTelephony) {
+      createWebRtcSession(socket, sessionId, {
+        onAudioBase64: appendAudioToGptBase64,
+      });
+      registerWebRtcSocketHandlers(socket, sessionId);
+    }
   } catch (err) {
     logger.error(`❌ [${sessionId}] Initialization failed:`, err);
 
@@ -665,14 +669,17 @@ export async function handleRealtimeAI(socket, token, timezone) {
     );
   });
 
-  socket.on("audio-chunk", (chunkArrayBuffer) => {
+  socket.on("audio-chunk", (chunk) => {
     try {
       const webrtc = getWebRtcSession(sessionId);
       if (webrtc?.useWebRtcAudio) {
         return;
       }
 
-      const base64Audio = Buffer.from(chunkArrayBuffer).toString("base64");
+      const base64Audio =
+        typeof chunk === "string"
+          ? chunk
+          : Buffer.from(chunk).toString("base64");
 
       appendAudioToGptBase64(base64Audio);
     } catch (err) {
@@ -774,4 +781,9 @@ export async function handleRealtimeAI(socket, token, timezone) {
 
     logger.info(`✅ [${sessionId}] Full cleanup complete`);
   });
+
+  if (sessionId.startsWith("telephony_")) {
+    socket.emit("conversation-started");
+    logger.info(`📞 [${sessionId}] Telephony session marked active`);
+  }
 }

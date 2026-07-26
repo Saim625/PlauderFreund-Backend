@@ -66,7 +66,8 @@ class CallManager {
 
     if (session) {
       if (session.mockSocket) {
-        session.mockSocket.emit("disconnect"); // Triggers existing cleanup & memory summary
+        session.mockSocket.emit("disconnect");
+        session.mockSocket.destroy?.();
       }
       //   if (session.externalMedia) {
       //     session.externalMedia.destroy();

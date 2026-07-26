@@ -11,34 +11,33 @@ export class CallSession {
     this.startTime = new Date();
     this.isActive = true;
 
-    // Milestone 3 Media Components
-    this.rtpReceiver = new RTPReceiver(10000);
-    this.rtpSender = new RTPSender();
+    const mediaLabel = `Call:${this.channelId}`;
+    this.rtpReceiver = new RTPReceiver(10000, `${mediaLabel}/in`);
+    this.rtpSender = new RTPSender("127.0.0.1", null, `${mediaLabel}/out`);
     this.externalMedia = new ExternalMedia({
       externalHost: "127.0.0.1:10000",
-      format: "ulaw", // 16kHz PCM
+      format: "ulaw",
     });
   }
-
-  // src/telephony/calls/CallSession.js
 
   async answer() {
     try {
       const channelController = ariClient.Channel(this.channelId);
       await channelController.answer();
 
-      // 1. Start listening for incoming audio packets
       this.rtpReceiver.start();
 
-      // STEP 3 FIX: Forward audio from rtpReceiver -> externalMedia
-      // This allows TelephonySocketAdapter to receive the audio stream!
-      this.rtpReceiver.on("audio", (pcmBuffer) => {
+      this.rtpReceiver.on("audio", (audioPayload, rinfo) => {
+        if (rinfo && !this._rtpTargetSet) {
+          this.rtpSender.setTarget(rinfo.address, rinfo.port);
+          this._rtpTargetSet = true;
+        }
+
         if (this.externalMedia) {
-          this.externalMedia.emit("audio", pcmBuffer);
+          this.externalMedia.emit("audio", audioPayload);
         }
       });
 
-      // 2. Establish Asterisk External Media and Bridge
       await this.externalMedia.establish(this.channelId);
     } catch (error) {
       console.error(
@@ -51,7 +50,6 @@ export class CallSession {
   async end() {
     this.isActive = false;
 
-    // Clean up media sockets and channels
     if (this.rtpReceiver) this.rtpReceiver.stop();
     if (this.rtpSender) this.rtpSender.close();
     if (this.externalMedia) await this.externalMedia.destroy();
