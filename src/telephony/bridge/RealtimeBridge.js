@@ -14,6 +14,7 @@ export class TelephonySocketAdapter extends EventEmitter {
     this.connected = true;
     this._firstAudioForwarded = false;
     this._gptChunksForwarded = 0;
+    this._pendingDoneContext = null;
     this._gptForwardTimer = setInterval(() => {
       if (this._gptChunksForwarded === 0) return;
       console.log(
@@ -33,16 +34,12 @@ export class TelephonySocketAdapter extends EventEmitter {
           );
         }
 
-        // Match web client: raw PCM bytes (Buffer), not a base64 string
         this.emit("audio-chunk", pcm24k);
         this._gptChunksForwarded++;
       });
     }
   }
 
-  /**
-   * Mocks socket.emit() from Socket.IO
-   */
   emit(event, data) {
     if (event === "ai-audio-chunk" && data?.audio) {
       const pcm24k = Buffer.from(data.audio, "base64");
@@ -54,11 +51,31 @@ export class TelephonySocketAdapter extends EventEmitter {
       return true;
     }
 
+    if (event === "ai-interrupt") {
+      this._pendingDoneContext = null;
+      this.rtpSender?.clearQueue();
+      return super.emit(event, data);
+    }
+
     if (event === "ai-audio-complete" && data?.contextId) {
-      // Telephony has no browser playback ack — simulate it for context cleanup
-      setTimeout(() => {
-        super.emit("ai-audio-done", { contextId: data.contextId });
-      }, 150);
+      const { contextId } = data;
+
+      if (this._pendingDoneContext === contextId) {
+        return true;
+      }
+      this._pendingDoneContext = contextId;
+
+      if (this.rtpSender) {
+        this.rtpSender.flush();
+        this.rtpSender.whenIdle(() => {
+          if (this._pendingDoneContext !== contextId) return;
+          this._pendingDoneContext = null;
+          super.emit("ai-audio-done", { contextId });
+        });
+      } else {
+        super.emit("ai-audio-done", { contextId });
+      }
+
       return true;
     }
 
@@ -67,6 +84,7 @@ export class TelephonySocketAdapter extends EventEmitter {
 
   destroy() {
     clearInterval(this._gptForwardTimer);
+    this.rtpSender?.clearQueue();
     this.connected = false;
   }
 }

@@ -38,13 +38,12 @@ export class RTPUtils {
     timestamp,
     ssrc = 12345,
     payloadType = 11,
+    marker = false,
   ) {
     const header = Buffer.alloc(12);
 
-    // Version (2), Padding (0), Extension (0), CSRC count (0) -> 0x80
     header[0] = 0x80;
-    // Marker bit (0), Payload Type
-    header[1] = payloadType & 0x7f;
+    header[1] = (marker ? 0x80 : 0) | (payloadType & 0x7f);
 
     // Sequence Number (2 bytes)
     header.writeUInt16BE(sequenceNumber % 65536, 2);
