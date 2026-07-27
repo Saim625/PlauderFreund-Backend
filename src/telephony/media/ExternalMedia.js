@@ -13,10 +13,6 @@ export class ExternalMedia extends EventEmitter {
 
   async establish(callChannelId) {
     try {
-      console.log(
-        `📡 [ExternalMedia] Requesting UnicastRTP channel (${this.format}) targeting ${this.externalHost}...`,
-      );
-
       // 1. Create the external media channel via the channels resource
       this.channel = await ariClient.channels.createExternalMedia({
         app: this.app,
@@ -26,9 +22,9 @@ export class ExternalMedia extends EventEmitter {
         encapsulation: "rtp",
       });
 
-      console.log(
-        `✅ [ExternalMedia] External channel created with ID: ${this.channel.id}`,
-      );
+      console.log(this.channel);
+      console.log(typeof this.channel.hangup);
+      console.log(typeof this.channel.destroy);
 
       // 2. Create a mixing bridge via the bridges resource
       this.bridge = await ariClient.bridges.createBridge({
