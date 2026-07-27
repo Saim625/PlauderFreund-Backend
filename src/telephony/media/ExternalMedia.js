@@ -1,6 +1,12 @@
 import ariClient from "../ari/ariClient.js";
 import EventEmitter from "events";
 
+console.log("CHANNEL METHODS:");
+console.log(Object.keys(ariClient.channels));
+
+console.log("BRIDGE METHODS:");
+console.log(Object.keys(ariClient.bridges));
+
 export class ExternalMedia extends EventEmitter {
   constructor(options = {}) {
     super();
