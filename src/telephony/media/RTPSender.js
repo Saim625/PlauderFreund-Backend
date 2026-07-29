@@ -152,10 +152,6 @@ export class RTPSender {
 
     this.stats.recordOutbound(FRAME_SIZE, this.targetHost, this.targetPort);
 
-    console.log(
-      `📤 Sending RTP frame seq=${this.sequenceNumber} (${frame.length} bytes)`,
-    );
-
     this.socket.send(
       packet,
       0,
