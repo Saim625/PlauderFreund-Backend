@@ -42,6 +42,7 @@ export class TelephonySocketAdapter extends EventEmitter {
 
   emit(event, data) {
     if (event === "ai-audio-chunk" && data?.audio) {
+      console.log("🎵 AI audio chunk received");
       const pcm24k = Buffer.from(data.audio, "base64");
       const mulawBuffer = encode24kPcmToMulaw(pcm24k);
 
