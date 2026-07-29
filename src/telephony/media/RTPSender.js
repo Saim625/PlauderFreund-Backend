@@ -8,7 +8,11 @@ const FRAME_MS = 20;
 const ULAW_SILENCE = 0xff;
 
 export class RTPSender {
-  constructor(targetHost = "127.0.0.1", targetPort = null, label = "RTPSender") {
+  constructor(
+    targetHost = "127.0.0.1",
+    targetPort = null,
+    label = "RTPSender",
+  ) {
     this.targetHost = targetHost;
     this.targetPort = targetPort;
     this.label = label;
@@ -146,10 +150,10 @@ export class RTPSender {
 
     this.timestamp += FRAME_SIZE;
 
-    this.stats.recordOutbound(
-      FRAME_SIZE,
-      this.targetHost,
-      this.targetPort,
+    this.stats.recordOutbound(FRAME_SIZE, this.targetHost, this.targetPort);
+
+    console.log(
+      `📤 Sending RTP frame seq=${this.sequenceNumber} (${frame.length} bytes)`,
     );
 
     this.socket.send(
