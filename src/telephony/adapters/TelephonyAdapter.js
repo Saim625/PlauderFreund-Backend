@@ -31,6 +31,9 @@ export class TelephonySocketAdapter extends EventEmitter {
   emit(event, data) {
     // 1. Intercept AI audio chunks from ElevenLabs / OpenAI
     if (event === "ai-audio-chunk" && data?.audio) {
+      console.log(
+        `🎵 AI audio chunk received (${Buffer.from(data.audio, "base64").length} bytes)`,
+      );
       const pcm24k = Buffer.from(data.audio, "base64");
 
       // Downsample 24kHz PCM to 8kHz µ-law
