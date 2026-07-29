@@ -18,7 +18,6 @@ export function createTtsAudioTransport(sessionId, socket) {
     return session?.useWebRtcTts === true;
   }
 
-  console.log("Transport socket:", socket.constructor.name);
   return {
     pushChunk({ contextId, audio, isFinal = false }) {
       if (contextId !== activeContextId) {

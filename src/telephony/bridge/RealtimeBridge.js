@@ -17,9 +17,6 @@ export class TelephonySocketAdapter extends EventEmitter {
     this._pendingDoneContext = null;
     this._gptForwardTimer = setInterval(() => {
       if (this._gptChunksForwarded === 0) return;
-      console.log(
-        `📊 [${this.id}] forwarded ${this._gptChunksForwarded} PCM chunks to GPT (last 10s)`,
-      );
       this._gptChunksForwarded = 0;
     }, 10000);
 
@@ -29,15 +26,14 @@ export class TelephonySocketAdapter extends EventEmitter {
 
         if (!this._firstAudioForwarded) {
           this._firstAudioForwarded = true;
-          console.log(
-            `✅ [${this.id}] First caller audio converted (${mulawBuffer.length}B µ-law → ${pcm24k.length}B PCM24k)`,
-          );
         }
 
         this.emit("audio-chunk", pcm24k);
         this._gptChunksForwarded++;
       });
     }
+
+    console.log("RTPSender exists:", !!this.rtpSender);
   }
 
   emit(event, data) {
@@ -47,6 +43,7 @@ export class TelephonySocketAdapter extends EventEmitter {
       const mulawBuffer = encode24kPcmToMulaw(pcm24k);
 
       if (this.rtpSender) {
+        console.log(`➡️ Sending ${mulawBuffer.length} bytes to RTPSender`);
         this.rtpSender.sendAudio(mulawBuffer);
       }
       return true;
