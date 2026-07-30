@@ -22,10 +22,6 @@ export class ExternalMedia extends EventEmitter {
         encapsulation: "rtp",
       });
 
-      console.log(this.channel);
-      console.log(typeof this.channel.hangup);
-      console.log(typeof this.channel.destroy);
-
       // 2. Create a mixing bridge via the bridges resource
       this.bridge = await ariClient.bridges.createBridge({
         type: "mixing",
