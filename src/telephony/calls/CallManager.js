@@ -60,7 +60,7 @@ class CallManager {
     }
   }
 
-  handleHangup(event) {
+  async handleHangup(event) {
     const channelId = event.channel.id;
     const session = this.activeSessions.get(channelId);
 
@@ -70,7 +70,7 @@ class CallManager {
         session.mockSocket.destroy?.();
       }
 
-     await session.end();
+      await session.end();
       this.activeSessions.delete(channelId);
       console.log(
         `🧹 [CallManager] Session memory cleared for channel: ${channelId}`,
