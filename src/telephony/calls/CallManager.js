@@ -69,11 +69,8 @@ class CallManager {
         session.mockSocket.emit("disconnect");
         session.mockSocket.destroy?.();
       }
-      if (session.externalMedia) {
-        session.externalMedia.destroy();
-      }
 
-      session.end();
+     await session.end();
       this.activeSessions.delete(channelId);
       console.log(
         `🧹 [CallManager] Session memory cleared for channel: ${channelId}`,

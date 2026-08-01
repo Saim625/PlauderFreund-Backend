@@ -59,7 +59,8 @@ export class ExternalMedia extends EventEmitter {
         console.log(
           `🧹 [ExternalMedia] Destroying mixing bridge: ${this.bridge.id}...`,
         );
-        ariClient.bridges.destroy(this.bridge.id);
+        await ariClient.bridges.destroy(this.bridge.id);
+        console.log("✅ Bridge destroyed");
         this.bridge = null;
       }
 
