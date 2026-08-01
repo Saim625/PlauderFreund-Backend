@@ -69,9 +69,9 @@ class CallManager {
         session.mockSocket.emit("disconnect");
         session.mockSocket.destroy?.();
       }
-      //   if (session.externalMedia) {
-      //     session.externalMedia.destroy();
-      //   }
+      if (session.externalMedia) {
+        session.externalMedia.destroy();
+      }
 
       session.end();
       this.activeSessions.delete(channelId);
