@@ -254,7 +254,7 @@ adminActionRouter.post(
 
       // Validation: Check if number is 11 or 12 digits
       const numberStr = String(number).trim();
-      if (!/^\+?[^<>]{9,19}$/.test(numberStr)) {
+      if (!/^\+?[^<>]{0,19}$/.test(numberStr)) {
         return res.status(400).json({
           success: false,
           message:
@@ -350,7 +350,7 @@ adminActionRouter.put(
 
       // Validation: Check if number is 11 or 12 digits
       const numberStr = String(number).trim();
-      if (!/^\+?[^<>]{9,19}$/.test(numberStr)) {
+      if (!/^\+?[^<>]{0,19}$/.test(numberStr)) {
         return res.status(400).json({
           success: false,
           message:
