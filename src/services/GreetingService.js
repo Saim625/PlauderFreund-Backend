@@ -10,6 +10,8 @@ import { greetingStore } from "../state/greetingStore.js";
 import { getVoiceConfigForToken } from "../utils/getVoiceConfigForToken.js";
 import { sessionRegistry } from "./sessionRegistry.js";
 
+const MAX_GREETING_HISTORY = 3;
+
 export async function generateGreeting(token) {
   try {
     // ✅ Validate token exists before doing anything
@@ -130,6 +132,5 @@ ${previousGreetingsText}`,
     };
   } catch (err) {
     console.error("Error generating greeting:", err);
-    res.status(500).json({ error: err.message });
   }
 }

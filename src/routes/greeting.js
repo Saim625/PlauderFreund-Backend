@@ -3,8 +3,6 @@ import { generateGreeting } from "../services/GreetingService.js";
 
 export const greetingRouter = express.Router();
 
-const MAX_GREETING_HISTORY = 3;
-
 greetingRouter.post("/generate-greeting", async (req, res) => {
   try {
     const { token } = req.body;
