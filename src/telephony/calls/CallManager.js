@@ -41,7 +41,7 @@ class CallManager {
       // 2. Instantiate and answer channel
       const session = new CallSession(channel, user);
       this.activeSessions.set(channelId, session);
-      await session.answer();
+      await session.prepare();
 
       // 4. Create Telephony Socket Adapter
       const mockSocket = new TelephonySocketAdapter(
@@ -55,6 +55,8 @@ class CallManager {
 
       // 5. Connect directly to existing AI Engine
       await handleRealtimeAI(mockSocket, user.token);
+
+      await session.answer();
     } catch (error) {
       console.error(`❌ [CallManager] Error setting up call session:`, error);
     }

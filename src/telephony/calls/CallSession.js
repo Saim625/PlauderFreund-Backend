@@ -20,11 +20,8 @@ export class CallSession {
     });
   }
 
-  async answer() {
+  async prepare() {
     try {
-      const channelController = ariClient.Channel(this.channelId);
-      await channelController.answer();
-
       this.rtpReceiver.start();
 
       this.rtpReceiver.on("audio", (audioPayload, rinfo) => {
@@ -41,7 +38,19 @@ export class CallSession {
       await this.externalMedia.establish(this.channelId);
     } catch (error) {
       console.error(
-        `❌ [Session ${this.channelId}] Error setting up media pipeline:`,
+        `❌ [Session ${this.channelId}] Error preparing & setting up media pipeline:`,
+        error,
+      );
+    }
+  }
+
+  async answer() {
+    try {
+      const channelController = ariClient.Channel(this.channelId);
+      await channelController.answer();
+    } catch (error) {
+      console.error(
+        `❌ [Session ${this.channelId}] Error answering call:`,
         error,
       );
     }
