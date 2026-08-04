@@ -7,6 +7,12 @@ const MAX_GREETING_HISTORY = 3;
 
 greetingRouter.post("/generate-greeting", async (req, res) => {
   try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({ error: "Token is required" });
+    }
+
     const { text, audioBuffer } = await generateGreeting(token);
 
     res.json({

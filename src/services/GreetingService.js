@@ -12,11 +12,6 @@ import { sessionRegistry } from "./sessionRegistry.js";
 
 export async function generateGreeting(token) {
   try {
-    const { token } = req.body;
-    if (!token) {
-      return res.status(400).json({ error: "Token is required" });
-    }
-
     // ✅ Validate token exists before doing anything
     const userExists = await prisma.userAccessToken.findUnique({
       where: { token },
@@ -24,7 +19,6 @@ export async function generateGreeting(token) {
 
     if (!userExists) {
       console.warn(`⚠️ Invalid token attempted: ${token}`);
-      return res.status(401).json({ error: "Invalid token" });
     }
 
     const memory = await prisma.memorySummary.findUnique({
