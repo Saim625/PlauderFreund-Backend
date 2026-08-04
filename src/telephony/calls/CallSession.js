@@ -10,6 +10,7 @@ export class CallSession {
     this.user = user;
     this.startTime = new Date();
     this.isActive = true;
+    this.greetingAudio = null;
 
     const mediaLabel = `Call:${this.channelId}`;
     this.rtpReceiver = new RTPReceiver(10000, `${mediaLabel}/in`);
@@ -54,6 +55,16 @@ export class CallSession {
         error,
       );
     }
+  }
+
+  async playGreeting() {
+    if (!this.greetingAudio) return;
+
+    this.rtpSender.sendGreeting(this.greetingAudio);
+
+    return new Promise((resolve) => {
+      this.rtpSender.whenIdle(resolve);
+    });
   }
 
   async end() {

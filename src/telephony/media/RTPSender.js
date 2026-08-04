@@ -1,6 +1,7 @@
 import dgram from "dgram";
 import { RTPUtils } from "../utils/codecs.js";
 import { createMediaStats } from "../utils/telephonyDebug.js";
+import { encode24kPcmToMulaw } from "../utils/AudioResampler.js";
 
 const ULAW_PAYLOAD_TYPE = 0;
 const FRAME_SIZE = 160; // 20ms @ 8kHz µ-law (1 byte/sample)
@@ -45,6 +46,14 @@ export class RTPSender {
     this.pending = Buffer.concat([this.pending, audioBuffer]);
     this._enqueueFullFrames();
     this._ensurePacing();
+  }
+
+  sendGreeting(pcm24Buffer) {
+    const ulaw = encode24kPcmToMulaw(pcm24Buffer);
+
+    this.sendAudio(ulaw);
+
+    this.flush();
   }
 
   /** Pad and enqueue any trailing partial frame (call at end of TTS utterance). */

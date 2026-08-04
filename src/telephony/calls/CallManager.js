@@ -3,6 +3,7 @@ import { UserLookup } from "../services/UserLookup.js";
 import { ExternalMedia } from "../media/ExternalMedia.js";
 import { TelephonySocketAdapter } from "../bridge/RealtimeBridge.js";
 import { handleRealtimeAI } from "../../features/realtimeHandler.js"; // Path to existing handler
+import { generateGreeting } from "../../services/GreetingService.js";
 
 class CallManager {
   constructor() {
@@ -38,8 +39,13 @@ class CallManager {
         `✅ [CallManager] Authenticated User Token: ${user.token.substring(0, 8)}...`,
       );
 
-      // 2. Instantiate and answer channel
+      const greeting = await generateGreeting(user.token);
+
       const session = new CallSession(channel, user);
+
+      session.greetingAudio = greeting.audioBuffer;
+
+      // 2. Instantiate and answer channel
       this.activeSessions.set(channelId, session);
       await session.prepare();
 
@@ -57,6 +63,8 @@ class CallManager {
       await handleRealtimeAI(mockSocket, user.token);
 
       await session.answer();
+
+      await session.playGreeting();
     } catch (error) {
       console.error(`❌ [CallManager] Error setting up call session:`, error);
     }
