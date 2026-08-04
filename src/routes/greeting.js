@@ -1,5 +1,5 @@
 import express from "express";
-import { generateGreeting } from "../services/GreetingService";
+import { generateGreeting } from "../services/GreetingService.js";
 
 export const greetingRouter = express.Router();
 
