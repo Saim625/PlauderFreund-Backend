@@ -29,6 +29,8 @@ export class RTPSender {
     this.pacingTimer = null;
     this.markerNext = true;
     this.idleCallbacks = [];
+    this._preTargetBuffer = Buffer.alloc(0);
+    this._prerollFrames = 4;
   }
 
   setTarget(host, port) {
@@ -38,10 +40,42 @@ export class RTPSender {
     console.log(
       `🎯 [${this.label}] RTP return path set → ${this.targetHost}:${this.targetPort}`,
     );
+
+    if (this._preTargetBuffer.length > 0) {
+      const buffered = this._preTargetBuffer;
+      this._preTargetBuffer = Buffer.alloc(0);
+      this.sendAudio(buffered);
+    }
+  }
+
+  waitForTarget(timeoutMs = 3000) {
+    if (this._targetSet && this.targetPort) {
+      return Promise.resolve(true);
+    }
+
+    return new Promise((resolve) => {
+      const started = Date.now();
+      const timer = setInterval(() => {
+        if (this._targetSet && this.targetPort) {
+          clearInterval(timer);
+          resolve(true);
+          return;
+        }
+        if (Date.now() - started >= timeoutMs) {
+          clearInterval(timer);
+          resolve(false);
+        }
+      }, 25);
+    });
   }
 
   sendAudio(audioBuffer) {
-    if (!this._canSend()) return;
+    if (!audioBuffer?.length) return;
+
+    if (!this._targetSet || !this.targetPort) {
+      this._preTargetBuffer = Buffer.concat([this._preTargetBuffer, audioBuffer]);
+      return;
+    }
 
     this.pending = Buffer.concat([this.pending, audioBuffer]);
     this._enqueueFullFrames();
@@ -76,6 +110,14 @@ export class RTPSender {
     this.markerNext = true;
     this.idleCallbacks = [];
     this._stopPacing();
+  }
+
+  _maybeEnqueuePreroll() {
+    if (!this.markerNext || this._prerollFrames <= 0) return;
+
+    for (let i = 0; i < this._prerollFrames; i++) {
+      this.frameQueue.push(Buffer.alloc(FRAME_SIZE, ULAW_SILENCE));
+    }
   }
 
   whenIdle(callback) {
@@ -120,6 +162,12 @@ export class RTPSender {
 
   _ensurePacing() {
     if (this.pacingTimer) return;
+    if (this.frameQueue.length === 0 && this.pending.length < FRAME_SIZE) return;
+
+    this._maybeEnqueuePreroll();
+    if (this.frameQueue.length === 0) {
+      this._enqueueFullFrames();
+    }
     if (this.frameQueue.length === 0) return;
 
     this._sendNextFrame();

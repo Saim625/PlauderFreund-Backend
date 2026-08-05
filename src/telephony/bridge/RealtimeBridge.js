@@ -1,6 +1,5 @@
 // src/telephony/bridge/RealtimeBridge.js
 import EventEmitter from "events";
-import fs from "fs";
 import {
   decodeMulawTo24kPcm,
   encode24kPcmToMulaw,
@@ -39,8 +38,6 @@ export class TelephonySocketAdapter extends EventEmitter {
     if (event === "ai-audio-chunk" && data?.audio) {
       const pcm24k = Buffer.from(data.audio, "base64");
       const mulawBuffer = encode24kPcmToMulaw(pcm24k);
-
-      fs.appendFileSync("./telephony-output.ulaw", mulawBuffer);
 
       if (this.rtpSender) {
         this.rtpSender.sendAudio(mulawBuffer);

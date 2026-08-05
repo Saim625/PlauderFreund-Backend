@@ -1,9 +1,15 @@
 import { CallSession } from "./CallSession.js";
 import { UserLookup } from "../services/UserLookup.js";
-import { ExternalMedia } from "../media/ExternalMedia.js";
 import { TelephonySocketAdapter } from "../bridge/RealtimeBridge.js";
-import { handleRealtimeAI } from "../../features/realtimeHandler.js"; // Path to existing handler
+import { handleRealtimeAI } from "../../features/realtimeHandler.js";
 import { generateGreeting } from "../../services/GreetingService.js";
+import { resolveUserTimezone } from "../../utils/resolveUserTimezone.js";
+import { sessionRegistry } from "../../services/sessionRegistry.js";
+import {
+  markAiPlaybackDone,
+  markAiSpeaking,
+  setReengagementBlocked,
+} from "../../services/reengagementEngine.js";
 
 class CallManager {
   constructor() {
@@ -40,31 +46,47 @@ class CallManager {
       );
 
       const greeting = await generateGreeting(user.token);
+      const timezone = await resolveUserTimezone(user.token);
 
       const session = new CallSession(channel, user);
-
       session.greetingAudio = greeting.audioBuffer;
 
-      // 2. Instantiate and answer channel
       this.activeSessions.set(channelId, session);
       await session.prepare();
 
-      // 4. Create Telephony Socket Adapter
       const mockSocket = new TelephonySocketAdapter(
         channelId,
         session.externalMedia,
         session.rtpSender,
       );
-
-      //   session.externalMedia = externalMedia;
       session.mockSocket = mockSocket;
 
-      // 5. Connect directly to existing AI Engine
-      await handleRealtimeAI(mockSocket, user.token);
+      const sessionId = mockSocket.id;
+      sessionRegistry.register(user.token, sessionId);
+
+      const aiReady = handleRealtimeAI(mockSocket, user.token, timezone, {
+        deferConversationStart: true,
+      });
 
       await session.answer();
 
+      const rtpReady = await session.waitForRtpTarget(4000);
+      if (!rtpReady) {
+        console.warn(
+          `⚠️ [CallManager] RTP return path not learned in time for ${channelId}; greeting may be delayed`,
+        );
+      }
+
+      setReengagementBlocked(sessionId, true);
+      markAiSpeaking(sessionId);
       await session.playGreeting();
+      markAiPlaybackDone(sessionId);
+      setReengagementBlocked(sessionId, false);
+
+      await aiReady;
+
+      mockSocket.emit("conversation-started");
+      console.log(`📞 [CallManager] Call live — AI ready for ${sessionId}`);
     } catch (error) {
       console.error(`❌ [CallManager] Error setting up call session:`, error);
     }
@@ -75,6 +97,10 @@ class CallManager {
     const session = this.activeSessions.get(channelId);
 
     if (session) {
+      if (session.user?.token) {
+        sessionRegistry.unregister(session.user.token);
+      }
+
       if (session.mockSocket) {
         session.mockSocket.emit("disconnect");
         session.mockSocket.destroy?.();

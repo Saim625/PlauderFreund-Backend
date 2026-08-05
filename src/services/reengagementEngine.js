@@ -2,6 +2,12 @@ import logger from "../utils/logger.js";
 
 export const sessions = new Map();
 
+/** @type {Map<string, () => void>} */
+const reengagementTriggers = new Map();
+
+export const REENGAGEMENT_SILENCE_MS = 20000;
+export const REENGAGEMENT_COOLDOWN_MS = 20000;
+
 export function initSession(socketId) {
   sessions.set(socketId, {
     lastUserAudioAt: Date.now(),
@@ -10,11 +16,38 @@ export function initSession(socketId) {
     userIsSpeaking: false,
     cooldownUntil: 0,
     conversationActive: false,
+    reengagementEnabled: true,
+    reengagementBlocked: false,
   });
   logger.info(`🎬 [${socketId}] Session initialized`);
 }
 
+export function registerReengagementTrigger(sessionId, fn) {
+  if (typeof fn === "function") {
+    reengagementTriggers.set(sessionId, fn);
+  }
+}
+
+export function unregisterReengagementTrigger(sessionId) {
+  reengagementTriggers.delete(sessionId);
+}
+
+export function getReengagementTrigger(sessionId) {
+  return reengagementTriggers.get(sessionId) || null;
+}
+
+export function setReengagementEnabled(sessionId, enabled) {
+  const s = sessions.get(socketId);
+  if (s) s.reengagementEnabled = enabled;
+}
+
+export function setReengagementBlocked(sessionId, blocked) {
+  const s = sessions.get(socketId);
+  if (s) s.reengagementBlocked = blocked;
+}
+
 export function destroySession(socketId) {
+  unregisterReengagementTrigger(sessionId);
   sessions.delete(socketId);
   logger.info(`🗑️ [${socketId}] Session destroyed`);
 }
@@ -82,7 +115,7 @@ export function markAiPlaybackDone(socketId) {
 export function markReengagementTriggered(socketId) {
   const s = sessions.get(socketId);
   if (s) {
-    const cooldownEnd = Date.now() + 20000;
+    const cooldownEnd = Date.now() + REENGAGEMENT_COOLDOWN_MS;
     s.cooldownUntil = cooldownEnd;
     logger.info(
       `🔄 [${socketId}] Re-engagement triggered. Cooldown until ${new Date(
@@ -125,6 +158,14 @@ export function startReengagementLoop(triggerFn) {
         continue;
       }
 
+      if (s.reengagementEnabled === false) {
+        continue;
+      }
+
+      if (s.reengagementBlocked) {
+        continue;
+      }
+
       if (s.aiIsSpeaking) {
         if (shouldLogStatus) {
           logger.info(`   [${socketId}] BLOCKED: AI is speaking`);
@@ -150,10 +191,10 @@ export function startReengagementLoop(triggerFn) {
         continue;
       }
 
-      if (silentFor < 20000) {
+      if (silentFor < REENGAGEMENT_SILENCE_MS) {
         if (shouldLogStatus) {
           logger.info(
-            `   [${socketId}] WAITING: Silent for ${silentForSeconds}s (need 10s)`
+            `   [${socketId}] WAITING: Silent for ${silentForSeconds}s (need ${Math.floor(REENGAGEMENT_SILENCE_MS / 1000)}s)`
           );
         }
         continue;
@@ -172,7 +213,12 @@ export function startReengagementLoop(triggerFn) {
         ).toISOString()}`
       );
 
-      triggerFn(socketId);
+      const directTrigger = reengagementTriggers.get(socketId);
+      if (directTrigger) {
+        directTrigger();
+      } else {
+        triggerFn(socketId);
+      }
     }
   }, 4000); // Check every 4 seconds
 }

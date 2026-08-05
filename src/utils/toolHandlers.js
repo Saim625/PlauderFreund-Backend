@@ -1,6 +1,15 @@
 import prisma from "../lib/db.js";
 import logger from "./logger.js";
 import { maybeInjectNextReminder } from "../services/reminderQueue.js";
+import { saveUserTimezoneToMemory } from "./userTimezoneMemory.js";
+import { isValidTimezone } from "./resolveUserTimezone.js";
+
+function resolveTimezoneArg(timezone) {
+  if (timezone && typeof timezone === "object" && "value" in timezone) {
+    return timezone.value;
+  }
+  return timezone;
+}
 
 async function sendToolResult(
   gptWs,
@@ -42,6 +51,7 @@ async function handleGetUserReminders(args, callId, token, gptWs, timezone) {
   try {
     const { filter = "all", reminder_type = "all" } = args;
     const now = new Date();
+    const safeTimezone = resolveTimezoneArg(timezone) || "UTC";
 
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
@@ -123,8 +133,6 @@ async function handleGetUserReminders(args, callId, token, gptWs, timezone) {
       };
     });
 
-    const safeTimezone = timezone || "UTC";
-
     const formattedText =
       formatted.length === 0
         ? "No reminders found."
@@ -166,7 +174,7 @@ async function handleGetUserReminders(args, callId, token, gptWs, timezone) {
     );
   } catch (err) {
     logger.error("❌ Error fetching reminders:", err);
-    sendToolResult(gptWs, callId, false, {
+    await sendToolResult(gptWs, callId, sessionId, token, false, {
       summary: "Failed to fetch reminders.",
     });
   }
@@ -220,9 +228,15 @@ async function handleUpdatePersonalityPreference(
   await sendToolResult(gptWs, callId, sessionId, token);
 }
 
-async function handleGetCurrentTime(callId, sessionId, token, timezone, gptWs) {
+async function handleGetCurrentTime(
+  callId,
+  sessionId,
+  token,
+  timezone,
+  gptWs,
+) {
   const now = new Date();
-  const safeTimezone = timezone || "UTC";
+  const safeTimezone = resolveTimezoneArg(timezone) || "UTC";
 
   await sendToolResult(gptWs, callId, sessionId, token, true, {
     utc: now.toISOString(),
@@ -242,6 +256,45 @@ async function handleGetCurrentTime(callId, sessionId, token, timezone, gptWs) {
   logger.info(
     `🕐 Time requested — timezone: ${safeTimezone}, time: ${now.toISOString()}`,
   );
+}
+
+async function handleUpdateUserTimezone(
+  args,
+  callId,
+  sessionId,
+  token,
+  timezone,
+  gptWs,
+) {
+  const requested = args.timezone?.trim();
+
+  if (!requested || !isValidTimezone(requested)) {
+    await sendToolResult(gptWs, callId, sessionId, token, false, {
+      message:
+        "Invalid timezone. Use a valid IANA name such as Europe/Berlin or Europe/Vienna.",
+    });
+    return;
+  }
+
+  try {
+    await saveUserTimezoneToMemory(token, requested);
+
+    if (timezone && typeof timezone === "object" && "value" in timezone) {
+      timezone.value = requested;
+    }
+
+    await sendToolResult(gptWs, callId, sessionId, token, true, {
+      timezone: requested,
+      message: `Timezone saved as ${requested}.`,
+    });
+
+    logger.info(`🌍 Timezone updated for ${token}: ${requested}`);
+  } catch (err) {
+    logger.error("❌ Error saving timezone:", err);
+    await sendToolResult(gptWs, callId, sessionId, token, false, {
+      message: "Could not save timezone.",
+    });
+  }
 }
 
 export async function handleToolCall(event, sessionId, token, gptWs, timezone) {
@@ -277,7 +330,21 @@ export async function handleToolCall(event, sessionId, token, gptWs, timezone) {
       await handleGetCurrentTime(call_id, sessionId, token, timezone, gptWs);
       break;
 
+    case "update_user_timezone":
+      await handleUpdateUserTimezone(
+        args,
+        call_id,
+        sessionId,
+        token,
+        timezone,
+        gptWs,
+      );
+      break;
+
     default:
       logger.warn(`⚠️ Unknown tool called: "${name}"`);
+      await sendToolResult(gptWs, call_id, sessionId, token, false, {
+        message: `Unknown tool: ${name}`,
+      });
   }
 }

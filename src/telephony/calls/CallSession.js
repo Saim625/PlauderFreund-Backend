@@ -67,6 +67,10 @@ export class CallSession {
     });
   }
 
+  waitForRtpTarget(timeoutMs = 4000) {
+    return this.rtpSender.waitForTarget(timeoutMs);
+  }
+
   async end() {
     this.isActive = false;
 

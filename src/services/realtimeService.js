@@ -20,7 +20,9 @@ export async function connectToRealtimeAPI(
   summaryText = "",
   token,
   timezone,
+  options = {},
 ) {
+  const channel = options.channel === "telephony" ? "telephony" : "web";
   const userToken = await prisma.userAccessToken.findFirst({
     where: {
       token: token,
@@ -95,14 +97,39 @@ The user's local time is derived from the UTC time above using their timezone.
 Always use "${timezone}" when referring to or calculating the user's local time.
   `.trim();
 
+  const telephonyInstructions =
+    channel === "telephony"
+      ? `
+
+### PHONE CALL MODE
+You are speaking over a narrow-band telephone line (8 kHz). Optimize for clarity:
+- Use shorter sentences and natural pauses.
+- Pronounce numbers very clearly: speak digits separately for phone numbers, dates, and times (e.g. "null eins sieben..." or "zero one seven...").
+- Avoid long lists in one breath.
+- When the user asks to save or set their timezone, call update_user_timezone with a valid IANA timezone (e.g. Europe/Berlin).
+- Do NOT greet again after the opening greeting unless the user explicitly asks.
+`.trim()
+      : "";
+
   const personalityInstructions = buildOpenAIPrompt(personalityConfig);
 
   const behaviorInstructions = `
 ${baseInstructions}
+${telephonyInstructions}
 
 --- PERSONALITY CONFIGURATION ---
 ${personalityInstructions}
   `.trim();
+
+  const turnDetection =
+    channel === "telephony"
+      ? {
+          type: "server_vad",
+          threshold: 0.5,
+          prefix_padding_ms: 300,
+          silence_duration_ms: 600,
+        }
+      : { type: "semantic_vad" };
 
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(realtimeWsUrl, {

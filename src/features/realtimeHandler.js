@@ -12,8 +12,11 @@ import {
   markUserSpeaking,
   markAiPlaybackDone,
   markReengagementTriggered,
+  registerReengagementTrigger,
+  setReengagementEnabled,
   sessions,
 } from "../services/reengagementEngine.js";
+import { resolveUserTimezone } from "../utils/resolveUserTimezone.js";
 import prisma from "../lib/db.js";
 import { ingestConversationMessage } from "../utils/ingestConversationMessage.js";
 import { flushConversationToMemory } from "../services/flushConversationToMemory.js";
@@ -42,7 +45,8 @@ import {
 } from "../services/webrtcService.js";
 import { createTtsAudioTransport } from "../services/ttsAudioTransport.js";
 
-export async function handleRealtimeAI(socket, token, timezone) {
+export async function handleRealtimeAI(socket, token, timezone, options = {}) {
+  const { deferConversationStart = false } = options;
   /* -------------------------------------------------------------------------- */
   /*                                  STATE                                     */
   /* -------------------------------------------------------------------------- */
@@ -61,11 +65,16 @@ export async function handleRealtimeAI(socket, token, timezone) {
   let gptReconnectAttempts = 0;
   const GPT_MAX_RECONNECT = 5;
 
-  const safeTimeZone = timezone || "UTC";
   const sessionId = socket.id;
   const sessionStartedAt = new Date();
+  const isTelephony = sessionId.startsWith("telephony_");
 
   initSession(sessionId);
+
+  const timezoneState = {
+    value: await resolveUserTimezone(token, timezone),
+  };
+  const getTimezone = () => timezoneState.value;
 
   /* -------------------------------------------------------------------------- */
   /*                              HELPER FUNCTIONS                              */
@@ -126,7 +135,8 @@ export async function handleRealtimeAI(socket, token, timezone) {
       summary,
       summaryText,
       token,
-      safeTimeZone,
+      getTimezone(),
+      { channel: isTelephony ? "telephony" : "web" },
     );
 
     socket.data = socket.data || {};
@@ -403,7 +413,13 @@ export async function handleRealtimeAI(socket, token, timezone) {
 
       if (event.type === "response.function_call_arguments.done") {
         try {
-          await handleToolCall(event, sessionId, token, gptWs, safeTimeZone);
+          await handleToolCall(
+            event,
+            sessionId,
+            token,
+            gptWs,
+            timezoneState,
+          );
 
           logger.info(`🛠️ [${sessionId}] Tool call handled successfully`);
         } catch (err) {
@@ -593,6 +609,21 @@ export async function handleRealtimeAI(socket, token, timezone) {
 
   try {
     voiceConfig = await getVoiceConfigForToken(token);
+    if (isTelephony) {
+      voiceConfig = {
+        ...voiceConfig,
+        speakingSpeed: voiceConfig.speakingSpeed || "slow",
+        telephonyOptimized: true,
+      };
+    }
+
+    const personalityConfig = await prisma.personalityConfig.findUnique({
+      where: { userToken: token },
+    });
+    setReengagementEnabled(
+      sessionId,
+      personalityConfig?.reengageAfterSilence !== false,
+    );
 
     ttsAudioTransport = createTtsAudioTransport(sessionId, socket);
 
@@ -610,10 +641,10 @@ export async function handleRealtimeAI(socket, token, timezone) {
 
     initSessionUsage(sessionId);
 
-    const isTelephony = sessionId.startsWith("telephony_");
+    const isTelephonySession = sessionId.startsWith("telephony_");
 
     // WebRTC is browser-only; telephony uses the RTP adapter path.
-    if (!isTelephony) {
+    if (!isTelephonySession) {
       createWebRtcSession(socket, sessionId, {
         onAudioBase64: appendAudioToGptBase64,
       });
@@ -637,18 +668,12 @@ export async function handleRealtimeAI(socket, token, timezone) {
   /*                               SOCKET EVENTS                                */
   /* -------------------------------------------------------------------------- */
 
-  socket.on("conversation-started", () => {
-    const s = sessions.get(sessionId);
+  async function executeReengagement() {
+    if (!gptWs || gptWs.readyState !== 1) {
+      logger.warn(`⚠️ [${sessionId}] Re-engagement skipped — GPT not ready`);
+      return;
+    }
 
-    if (!s) return;
-
-    s.conversationActive = true;
-    s.lastUserAudioAt = Date.now();
-    s.lastAiPlaybackFinishedAt = Date.now();
-    s.cooldownUntil = Date.now() + 5000;
-  });
-
-  socket.on("trigger-reengagement", async () => {
     markReengagementTriggered(sessionId);
 
     try {
@@ -662,11 +687,32 @@ export async function handleRealtimeAI(socket, token, timezone) {
         type: "response.create",
         response: {
           instructions:
-            "The user has been quiet. Say a short, friendly re-engagement sentence in the language user is talking. Be warm and natural. Do not ask multiple questions.",
+            "The user has been quiet for a while. Continue the SAME ongoing conversation — do NOT greet again, do not re-introduce yourself, and do not repeat the opening greeting. Say one short, warm check-in in the user's language. One sentence only, at most one simple question.",
           output_modalities: ["text"],
         },
       }),
     );
+  }
+
+  socket.on("trigger-reengagement", executeReengagement);
+
+  if (isTelephony) {
+    registerReengagementTrigger(sessionId, () => {
+      executeReengagement().catch((err) => {
+        logger.error(`❌ [${sessionId}] Telephony re-engagement failed:`, err);
+      });
+    });
+  }
+
+  socket.on("conversation-started", () => {
+    const s = sessions.get(sessionId);
+
+    if (!s) return;
+
+    s.conversationActive = true;
+    s.lastUserAudioAt = Date.now();
+    s.lastAiPlaybackFinishedAt = Date.now();
+    s.cooldownUntil = Date.now() + 5000;
   });
 
   socket.on("audio-chunk", (chunk) => {
@@ -747,7 +793,7 @@ export async function handleRealtimeAI(socket, token, timezone) {
     try {
       await flushConversationToMemory(
         token,
-        safeTimeZone,
+        getTimezone(),
         sessionId,
         "gpt-4o-mini",
       );
@@ -782,7 +828,7 @@ export async function handleRealtimeAI(socket, token, timezone) {
     logger.info(`✅ [${sessionId}] Full cleanup complete`);
   });
 
-  if (sessionId.startsWith("telephony_")) {
+  if (isTelephony && !deferConversationStart) {
     socket.emit("conversation-started");
     logger.info(`📞 [${sessionId}] Telephony session marked active`);
   }
