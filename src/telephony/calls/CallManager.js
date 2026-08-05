@@ -5,6 +5,7 @@ import { handleRealtimeAI } from "../../features/realtimeHandler.js";
 import { generateGreeting } from "../../services/GreetingService.js";
 import { resolveUserTimezone } from "../../utils/resolveUserTimezone.js";
 import { sessionRegistry } from "../../services/sessionRegistry.js";
+import { setSession, deleteSession } from "../../services/sessionStore.js";
 import {
   markAiPlaybackDone,
   markAiSpeaking,
@@ -63,6 +64,7 @@ class CallManager {
 
       const sessionId = mockSocket.id;
       sessionRegistry.register(user.token, sessionId);
+      setSession(user.token, mockSocket);
 
       const aiReady = handleRealtimeAI(mockSocket, user.token, timezone, {
         deferConversationStart: true,
@@ -99,6 +101,7 @@ class CallManager {
     if (session) {
       if (session.user?.token) {
         sessionRegistry.unregister(session.user.token);
+        deleteSession(session.user.token);
       }
 
       if (session.mockSocket) {

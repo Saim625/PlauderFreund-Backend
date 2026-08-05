@@ -27,6 +27,10 @@ OPENAI_API_KEY=your-openai-key
 ELEVENLABS_API_KEY=your-elevenlabs-key
 GOOGLE_API_KEY=your-google-key
 PORT=3000
+ARI_HOST=127.0.0.1
+ARI_PORT=8088
+ARI_USERNAME=your-ari-username
+ARI_PASSWORD=your-ari-password
 
 ## 🖥️ Getting Started
 

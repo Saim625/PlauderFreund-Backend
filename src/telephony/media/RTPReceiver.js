@@ -14,6 +14,10 @@ export class RTPReceiver extends EventEmitter {
   }
 
   start() {
+    if (this.socket) {
+      return Promise.resolve(this.port);
+    }
+
     this.socket = dgram.createSocket("udp4");
 
     this.socket.on("message", (msg, rinfo) => {
@@ -32,11 +36,27 @@ export class RTPReceiver extends EventEmitter {
       );
     });
 
-    this.socket.bind(this.port, "127.0.0.1", () => {
-      this.isListening = true;
-      console.log(
-        `🎧 [${this.label}] Listening for incoming audio on UDP 127.0.0.1:${this.port}`,
-      );
+    return new Promise((resolve, reject) => {
+      const onError = (err) => {
+        this.socket?.off("listening", onListening);
+        this.socket?.close();
+        this.socket = null;
+        this.isListening = false;
+        reject(err);
+      };
+      const onListening = () => {
+        this.socket?.off("error", onError);
+        this.isListening = true;
+        this.port = this.socket.address().port;
+        console.log(
+          `🎧 [${this.label}] Listening for incoming audio on UDP 127.0.0.1:${this.port}`,
+        );
+        resolve(this.port);
+      };
+
+      this.socket.once("error", onError);
+      this.socket.once("listening", onListening);
+      this.socket.bind(this.port, "127.0.0.1");
     });
   }
 

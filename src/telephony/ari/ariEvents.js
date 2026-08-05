@@ -13,7 +13,11 @@ export async function initializeAriGateway() {
 
     // Bind incoming events directly to the CallManager
     ariClient.on("StasisStart", async (event) => {
-      const chan = event?.channel || channel;
+      const chan = event?.channel;
+      if (!chan) {
+        console.warn("⚠️ [ariEvents] Ignoring StasisStart without a channel");
+        return;
+      }
       // Ignore external media RTP channels spawned by Asterisk
       if (chan?.name?.includes("UnicastRTP")) {
         console.log(`ℹ️ [ariEvents] Ignoring internal RTP channel: ${chan.id}`);

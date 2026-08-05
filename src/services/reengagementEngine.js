@@ -37,17 +37,17 @@ export function getReengagementTrigger(sessionId) {
 }
 
 export function setReengagementEnabled(sessionId, enabled) {
-  const s = sessions.get(socketId);
+  const s = sessions.get(sessionId);
   if (s) s.reengagementEnabled = enabled;
 }
 
 export function setReengagementBlocked(sessionId, blocked) {
-  const s = sessions.get(socketId);
+  const s = sessions.get(sessionId);
   if (s) s.reengagementBlocked = blocked;
 }
 
 export function destroySession(socketId) {
-  unregisterReengagementTrigger(sessionId);
+  unregisterReengagementTrigger(socketId);
   sessions.delete(socketId);
   logger.info(`🗑️ [${socketId}] Session destroyed`);
 }
@@ -105,8 +105,8 @@ export function markAiPlaybackDone(socketId) {
       `✅ [${socketId}] AI playback finished at ${new Date(now).toISOString()}`
     );
     logger.info(
-      `   → Re-engagement will trigger after 10s of silence (at ${new Date(
-        now + 20000
+        `   → Re-engagement will trigger after ${REENGAGEMENT_SILENCE_MS / 1000}s of silence (at ${new Date(
+        now + REENGAGEMENT_SILENCE_MS
       ).toISOString()})`
     );
   }

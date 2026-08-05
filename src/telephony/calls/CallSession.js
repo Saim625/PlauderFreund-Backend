@@ -13,17 +13,20 @@ export class CallSession {
     this.greetingAudio = null;
 
     const mediaLabel = `Call:${this.channelId}`;
-    this.rtpReceiver = new RTPReceiver(10000, `${mediaLabel}/in`);
+    // Let the OS allocate an isolated UDP port so concurrent calls cannot
+    // compete for a process-wide fixed port.
+    this.rtpReceiver = new RTPReceiver(0, `${mediaLabel}/in`);
     this.rtpSender = new RTPSender("127.0.0.1", null, `${mediaLabel}/out`);
     this.externalMedia = new ExternalMedia({
-      externalHost: "127.0.0.1:10000",
+      externalHost: null,
       format: "ulaw",
     });
   }
 
   async prepare() {
     try {
-      this.rtpReceiver.start();
+      const rtpPort = await this.rtpReceiver.start();
+      this.externalMedia.externalHost = `127.0.0.1:${rtpPort}`;
 
       this.rtpReceiver.on("audio", (audioPayload, rinfo) => {
         if (rinfo && !this._rtpTargetSet) {

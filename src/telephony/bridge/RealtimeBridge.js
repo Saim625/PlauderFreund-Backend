@@ -1,8 +1,8 @@
 // src/telephony/bridge/RealtimeBridge.js
 import EventEmitter from "events";
 import {
+  create24kPcmToMulawEncoder,
   decodeMulawTo24kPcm,
-  encode24kPcmToMulaw,
 } from "../utils/AudioResampler.js";
 
 export class TelephonySocketAdapter extends EventEmitter {
@@ -15,6 +15,7 @@ export class TelephonySocketAdapter extends EventEmitter {
     this._firstAudioForwarded = false;
     this._gptChunksForwarded = 0;
     this._pendingDoneContext = null;
+    this._outputEncoder = create24kPcmToMulawEncoder();
     this._gptForwardTimer = setInterval(() => {
       if (this._gptChunksForwarded === 0) return;
       this._gptChunksForwarded = 0;
@@ -37,7 +38,7 @@ export class TelephonySocketAdapter extends EventEmitter {
   emit(event, data) {
     if (event === "ai-audio-chunk" && data?.audio) {
       const pcm24k = Buffer.from(data.audio, "base64");
-      const mulawBuffer = encode24kPcmToMulaw(pcm24k);
+      const mulawBuffer = this._outputEncoder.push(pcm24k);
 
       if (this.rtpSender) {
         this.rtpSender.sendAudio(mulawBuffer);
@@ -47,6 +48,7 @@ export class TelephonySocketAdapter extends EventEmitter {
 
     if (event === "ai-interrupt") {
       this._pendingDoneContext = null;
+      this._outputEncoder.reset();
       this.rtpSender?.clearQueue();
       return super.emit(event, data);
     }
@@ -60,6 +62,8 @@ export class TelephonySocketAdapter extends EventEmitter {
       this._pendingDoneContext = contextId;
 
       if (this.rtpSender) {
+        const finalAudio = this._outputEncoder.flush();
+        if (finalAudio.length) this.rtpSender.sendAudio(finalAudio);
         this.rtpSender.flush();
         this.rtpSender.whenIdle(() => {
           if (this._pendingDoneContext !== contextId) return;

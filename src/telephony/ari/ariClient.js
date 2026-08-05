@@ -1,10 +1,16 @@
 import { AriClient } from "@ipcom/asterisk-ari";
+import {
+  ARI_HOST,
+  ARI_PASSWORD,
+  ARI_PORT,
+  ARI_USERNAME,
+} from "../../config/env.js";
 
 const ariClient = new AriClient({
-  host: "127.0.0.1",
-  port: 8088,
-  username: "plauder_user",
-  password: "ari@ps237", // Use your ari.conf password
+  host: ARI_HOST,
+  port: ARI_PORT,
+  username: ARI_USERNAME,
+  password: ARI_PASSWORD,
   secure: false,
   path: "/ari",
 });
