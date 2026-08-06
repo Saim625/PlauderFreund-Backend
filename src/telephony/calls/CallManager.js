@@ -3,7 +3,6 @@ import { UserLookup } from "../services/UserLookup.js";
 import { TelephonySocketAdapter } from "../bridge/RealtimeBridge.js";
 import { handleRealtimeAI } from "../../features/realtimeHandler.js";
 import { generateGreeting } from "../../services/GreetingService.js";
-import { resolveUserTimezone } from "../../utils/resolveUserTimezone.js";
 import { sessionRegistry } from "../../services/sessionRegistry.js";
 import { setSession, deleteSession } from "../../services/sessionStore.js";
 import {
@@ -49,7 +48,6 @@ class CallManager {
       const greeting = await generateGreeting(user.token, {
         outputFormat: "ulaw_8000",
       });
-      const timezone = await resolveUserTimezone(user.token);
 
       const session = new CallSession(channel, user);
       session.greetingAudio = greeting.audioBuffer;

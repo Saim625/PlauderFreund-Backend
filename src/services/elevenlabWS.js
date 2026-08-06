@@ -254,35 +254,55 @@ class ElevenLabsConnection {
 
     this.contextId = uuidv4();
 
+    const isTelephony = voiceConfig.telephonyOptimized === true;
+
     const initMsg = {
       text: " ",
       context_id: this.contextId,
-      voice_settings: {
-        stability:
-          voiceConfig.empathyLevel === "high"
-            ? 0.35
-            : voiceConfig.empathyLevel === "medium"
-              ? 0.55
-              : 0.75,
-        similarity_boost: 0.8,
-        style:
-          voiceConfig.empathyLevel === "high"
-            ? 0.65
-            : voiceConfig.empathyLevel === "medium"
-              ? 0.3
-              : 0.15,
-        use_speaker_boost: false,
-        speed:
-          voiceConfig.speakingSpeed === "slow"
-            ? 0.7
-            : voiceConfig.speakingSpeed === "fast"
-              ? 1.2
-              : 1.0,
-      },
-      generation_config: {
-        chunk_length_schedule: [50, 60, 100, 120],
-        auto_mode: true,
-      },
+
+      voice_settings: isTelephony
+        ? {
+            // Clear and calm over an 8 kHz phone line
+            stability: 0.62,
+            similarity_boost: 0.75,
+            style: 0,
+            use_speaker_boost: false,
+            speed: 0.88,
+          }
+        : {
+            // Preserve current web personality behavior
+            stability:
+              voiceConfig.empathyLevel === "high"
+                ? 0.35
+                : voiceConfig.empathyLevel === "medium"
+                  ? 0.55
+                  : 0.75,
+            similarity_boost: 0.8,
+            style:
+              voiceConfig.empathyLevel === "high"
+                ? 0.65
+                : voiceConfig.empathyLevel === "medium"
+                  ? 0.3
+                  : 0.15,
+            use_speaker_boost: false,
+            speed:
+              voiceConfig.speakingSpeed === "slow"
+                ? 0.7
+                : voiceConfig.speakingSpeed === "fast"
+                  ? 1.2
+                  : 1.0,
+          },
+
+      generation_config: isTelephony
+        ? {
+            // More context before speech = better prosody.
+            chunk_length_schedule: [60, 100, 160, 220],
+            auto_mode: false,
+          }
+        : {
+            chunk_length_schedule: [50, 60, 100, 120],
+            auto_mode: true,
+          },
     };
 
     try {

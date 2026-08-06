@@ -1,8 +1,9 @@
 import prisma from "../lib/db.js";
 
 const TIMEZONE_KEY_PATTERN = /timezone|time_zone|zeitzone|time zone/i;
+export const TELEPHONY_TIMEZONE = "Europe/Berlin";
 
-function isValidTimezone(tz) {
+export function isValidTimezone(tz) {
   if (!tz || typeof tz !== "string") return false;
   try {
     Intl.DateTimeFormat(undefined, { timeZone: tz });
@@ -13,9 +14,16 @@ function isValidTimezone(tz) {
 }
 
 /**
- * Resolve IANA timezone for a user (web client override, then memory, then fallback).
+ * Web keeps its browser and saved-user timezone behavior. Telephone sessions
+ * are deliberately fixed to Germany because they have no reliable device TZ.
  */
-export async function resolveUserTimezone(token, explicitTimezone) {
+export async function resolveUserTimezone(
+  token,
+  explicitTimezone,
+  { telephony = false } = {},
+) {
+  if (telephony) return TELEPHONY_TIMEZONE;
+
   if (
     explicitTimezone &&
     explicitTimezone !== "undefined" &&
@@ -33,20 +41,11 @@ export async function resolveUserTimezone(token, explicitTimezone) {
     for (const item of memory?.summary || []) {
       if (!TIMEZONE_KEY_PATTERN.test(item.key)) continue;
       const candidate = String(item.value || "").trim();
-      if (isValidTimezone(candidate)) {
-        return candidate;
-      }
+      if (isValidTimezone(candidate)) return candidate;
     }
   } catch {
-    // fall through to default
+    // Fall through to the Germany product default.
   }
 
-  if (isValidTimezone(explicitTimezone)) {
-    return explicitTimezone;
-  }
-
-  // Telephony callers often have no client timezone; DE product default.
-  return "Europe/Berlin";
+  return TELEPHONY_TIMEZONE;
 }
-
-export { isValidTimezone };

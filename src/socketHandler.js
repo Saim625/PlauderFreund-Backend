@@ -13,8 +13,8 @@ export default function registerSocketHandler(socket) {
 
     sessionRegistry.register(token, sessionId);
 
-    // A browser can identify its IANA timezone accurately. Persist it so a
-    // later phone call uses the same local-time context.
+    // Web sessions retain the browser timezone for their own reminders and
+    // time questions. Telephony ignores this saved value by design.
     if (timezone) {
       try {
         await saveUserTimezoneToMemory(token, timezone);

@@ -106,7 +106,7 @@ You are speaking over a narrow-band telephone line (8 kHz). Optimize for clarity
 - Use shorter sentences and natural pauses.
 - Pronounce numbers very clearly: speak digits separately for phone numbers, dates, and times (e.g. "null eins sieben..." or "zero one seven...").
 - Avoid long lists in one breath.
-- When the user asks to save or set their timezone, call update_user_timezone with a valid IANA timezone (e.g. Europe/Berlin).
+- timezone ia europe/berlin
 - Do NOT greet again after the opening greeting unless the user explicitly asks.
 `.trim()
       : "";

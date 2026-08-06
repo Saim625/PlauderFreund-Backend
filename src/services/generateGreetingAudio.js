@@ -28,8 +28,8 @@ export async function generateGreetingAudio(
           voiceConfig.empathyLevel === "high"
             ? 0.35
             : voiceConfig.empathyLevel === "medium"
-            ? 0.55
-            : 0.75,
+              ? 0.55
+              : 0.75,
         similarity_boost: 0.8,
 
         // use_speaker_boost is not usually needed here unless you explicitly use it elsewhere

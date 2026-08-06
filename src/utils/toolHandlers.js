@@ -1,8 +1,6 @@
 import prisma from "../lib/db.js";
 import logger from "./logger.js";
 import { maybeInjectNextReminder } from "../services/reminderQueue.js";
-import { saveUserTimezoneToMemory } from "./userTimezoneMemory.js";
-import { isValidTimezone } from "./resolveUserTimezone.js";
 
 function resolveTimezoneArg(timezone) {
   if (timezone && typeof timezone === "object" && "value" in timezone) {
@@ -258,45 +256,6 @@ async function handleGetCurrentTime(
   );
 }
 
-async function handleUpdateUserTimezone(
-  args,
-  callId,
-  sessionId,
-  token,
-  timezone,
-  gptWs,
-) {
-  const requested = args.timezone?.trim();
-
-  if (!requested || !isValidTimezone(requested)) {
-    await sendToolResult(gptWs, callId, sessionId, token, false, {
-      message:
-        "Invalid timezone. Use a valid IANA name such as Europe/Berlin or Europe/Vienna.",
-    });
-    return;
-  }
-
-  try {
-    await saveUserTimezoneToMemory(token, requested);
-
-    if (timezone && typeof timezone === "object" && "value" in timezone) {
-      timezone.value = requested;
-    }
-
-    await sendToolResult(gptWs, callId, sessionId, token, true, {
-      timezone: requested,
-      message: `Timezone saved as ${requested}.`,
-    });
-
-    logger.info(`🌍 Timezone updated for ${token}: ${requested}`);
-  } catch (err) {
-    logger.error("❌ Error saving timezone:", err);
-    await sendToolResult(gptWs, callId, sessionId, token, false, {
-      message: "Could not save timezone.",
-    });
-  }
-}
-
 export async function handleToolCall(event, sessionId, token, gptWs, timezone) {
   const { name, call_id, arguments: rawArgs } = event;
 
@@ -328,17 +287,6 @@ export async function handleToolCall(event, sessionId, token, gptWs, timezone) {
 
     case "get_current_time":
       await handleGetCurrentTime(call_id, sessionId, token, timezone, gptWs);
-      break;
-
-    case "update_user_timezone":
-      await handleUpdateUserTimezone(
-        args,
-        call_id,
-        sessionId,
-        token,
-        timezone,
-        gptWs,
-      );
       break;
 
     default:

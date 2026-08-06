@@ -80,10 +80,10 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
 
   initSession(sessionId);
 
-  const timezoneState = {
-    value: await resolveUserTimezone(token, timezone),
-  };
-  const getTimezone = () => timezoneState.value;
+  const resolvedTimezone = await resolveUserTimezone(token, timezone, {
+    telephony: isTelephony,
+  });
+  const getTimezone = () => resolvedTimezone;
 
   /* -------------------------------------------------------------------------- */
   /*                              HELPER FUNCTIONS                              */
@@ -490,13 +490,7 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
 
       if (event.type === "response.function_call_arguments.done") {
         try {
-          await handleToolCall(
-            event,
-            sessionId,
-            token,
-            gptWs,
-            timezoneState,
-          );
+          await handleToolCall(event, sessionId, token, gptWs, getTimezone());
 
           logger.info(`🛠️ [${sessionId}] Tool call handled successfully`);
         } catch (err) {
@@ -689,7 +683,6 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
     if (isTelephony) {
       voiceConfig = {
         ...voiceConfig,
-        speakingSpeed: voiceConfig.speakingSpeed || "slow",
         telephonyOptimized: true,
       };
     }
