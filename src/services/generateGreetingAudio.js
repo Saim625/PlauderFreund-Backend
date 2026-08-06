@@ -6,14 +6,18 @@ import {
   ELEVENLABS_VOICE_ID,
 } from "../config/env.js";
 
-export async function generateGreetingAudio(text, voiceConfig) {
+export async function generateGreetingAudio(
+  text,
+  voiceConfig,
+  { outputFormat = "pcm_24000" } = {},
+) {
   const response = await axios({
     method: "post",
-    url: `${ELEVENLABS_BASE_URL}/text-to-speech/${voiceConfig.voiceId}?output_format=pcm_24000`,
+    url: `${ELEVENLABS_BASE_URL}/text-to-speech/${voiceConfig.voiceId}?output_format=${outputFormat}`,
     headers: {
       "xi-api-key": ELEVENLABS_API_KEY,
       "Content-Type": "application/json",
-      Accept: "audio/pcm",
+      Accept: outputFormat === "ulaw_8000" ? "audio/basic" : "audio/pcm",
     },
     data: {
       text,

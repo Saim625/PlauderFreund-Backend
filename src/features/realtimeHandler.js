@@ -630,7 +630,13 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
     elevenConnection = await initElevenLabsForUser(
       sessionId,
       voiceConfig.voiceId,
-      { socket, audioTransport: ttsAudioTransport },
+      {
+        socket,
+        audioTransport: ttsAudioTransport,
+        // Browser playback expects PCM 24 kHz. Asterisk expects μ-law 8 kHz,
+        // so calls receive the telephony codec directly from ElevenLabs.
+        outputFormat: isTelephony ? "ulaw_8000" : "pcm_24000",
+      },
     );
 
     logger.info(`✅ [${sessionId}] ElevenLabs initialized`);

@@ -11,6 +11,7 @@ export class CallSession {
     this.startTime = new Date();
     this.isActive = true;
     this.greetingAudio = null;
+    this.greetingAudioFormat = "pcm_24000";
 
     const mediaLabel = `Call:${this.channelId}`;
     // Let the OS allocate an isolated UDP port so concurrent calls cannot
@@ -63,7 +64,7 @@ export class CallSession {
   async playGreeting() {
     if (!this.greetingAudio) return;
 
-    this.rtpSender.sendGreeting(this.greetingAudio);
+    this.rtpSender.sendGreeting(this.greetingAudio, this.greetingAudioFormat);
 
     return new Promise((resolve) => {
       this.rtpSender.whenIdle(resolve);

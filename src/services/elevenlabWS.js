@@ -18,11 +18,12 @@ const READY_TIMEOUT = 5000;
  * Connection class for each user
  */
 class ElevenLabsConnection {
-  constructor(userId, voiceId, { socket, audioTransport }) {
+  constructor(userId, voiceId, { socket, audioTransport, outputFormat }) {
     this.userId = userId;
     this.voiceId = voiceId;
     this.socket = socket;
     this.audioTransport = audioTransport;
+    this.outputFormat = outputFormat || "pcm_24000";
     this.ws = null;
     this.isReady = false;
     this.isConnecting = false;
@@ -59,7 +60,7 @@ class ElevenLabsConnection {
     // Clean up old connection
     this.cleanup(false);
 
-    const uri = `${ELEVENLABS_BASE_URL}/text-to-speech/${this.voiceId}/multi-stream-input?model_id=${ELEVENLABS_MODEL}&output_format=pcm_24000`;
+    const uri = `${ELEVENLABS_BASE_URL}/text-to-speech/${this.voiceId}/multi-stream-input?model_id=${ELEVENLABS_MODEL}&output_format=${this.outputFormat}`;
 
     this.isConnecting = true;
     logger.info(`🔌 [${this.userId}] Connecting to ElevenLabs...`);
@@ -401,6 +402,7 @@ class ElevenLabsConnection {
       connecting: this.isConnecting,
       contextId: this.contextId,
       reconnectAttempts: this.reconnectAttempts,
+      outputFormat: this.outputFormat,
     };
   }
 }
@@ -409,7 +411,11 @@ class ElevenLabsConnection {
  * PUBLIC API FUNCTIONS
  */
 
-export async function initElevenLabsForUser(userId, voiceId, { socket, audioTransport }) {
+export async function initElevenLabsForUser(
+  userId,
+  voiceId,
+  { socket, audioTransport, outputFormat = "pcm_24000" },
+) {
   // Validate voiceId
   if (!voiceId || voiceId === "undefined") {
     logger.error(`❌ Invalid voiceId for user ${userId}: ${voiceId}`);
@@ -438,6 +444,7 @@ export async function initElevenLabsForUser(userId, voiceId, { socket, audioTran
   connection = new ElevenLabsConnection(userId, voiceId, {
     socket,
     audioTransport,
+    outputFormat,
   });
   userConnections.set(userId, connection);
 

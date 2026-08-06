@@ -46,11 +46,14 @@ class CallManager {
         `✅ [CallManager] Authenticated User Token: ${user.token.substring(0, 8)}...`,
       );
 
-      const greeting = await generateGreeting(user.token);
+      const greeting = await generateGreeting(user.token, {
+        outputFormat: "ulaw_8000",
+      });
       const timezone = await resolveUserTimezone(user.token);
 
       const session = new CallSession(channel, user);
       session.greetingAudio = greeting.audioBuffer;
+      session.greetingAudioFormat = greeting.outputFormat;
 
       this.activeSessions.set(channelId, session);
       await session.prepare();

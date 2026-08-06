@@ -82,8 +82,11 @@ export class RTPSender {
     this._ensurePacing();
   }
 
-  sendGreeting(pcm24Buffer) {
-    const ulaw = encode24kPcmToMulaw(pcm24Buffer);
+  sendGreeting(audioBuffer, inputFormat = "pcm_24000") {
+    const ulaw =
+      inputFormat === "ulaw_8000"
+        ? audioBuffer
+        : encode24kPcmToMulaw(audioBuffer);
 
     this.sendAudio(ulaw);
 

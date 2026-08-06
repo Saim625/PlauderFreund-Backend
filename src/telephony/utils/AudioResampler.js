@@ -50,53 +50,6 @@ export function encode24kPcmToMulaw(pcm24kBuffer) {
   return mulawBuffer;
 }
 
-/**
- * Keeps partial PCM samples between TTS chunks so chunk boundaries cannot drop
- * audio samples or create clicks in a telephone call.
- */
-export function create24kPcmToMulawEncoder() {
-  let remainder = Buffer.alloc(0);
-
-  function push(pcm24kBuffer) {
-    const input = remainder.length
-      ? Buffer.concat([remainder, pcm24kBuffer])
-      : pcm24kBuffer;
-    const completeBytes = Math.floor(input.length / 6) * 6;
-
-    remainder = input.subarray(completeBytes);
-    if (completeBytes === 0) return Buffer.alloc(0);
-
-    return encode24kPcmToMulaw(input.subarray(0, completeBytes));
-  }
-
-  function flush() {
-    if (remainder.length === 0) return Buffer.alloc(0);
-
-    // PCM16 must end on a complete sample. Drop an invalid trailing byte rather
-    // than throwing while the call is active.
-    if (remainder.length % 2 !== 0) {
-      remainder = remainder.subarray(0, remainder.length - 1);
-    }
-    if (remainder.length === 0) return Buffer.alloc(0);
-
-    const padded = Buffer.alloc(6);
-    remainder.copy(padded);
-    const lastSampleOffset = Math.max(0, remainder.length - 2);
-    const lastSample = remainder.readInt16LE(lastSampleOffset);
-    for (let offset = remainder.length; offset < padded.length; offset += 2) {
-      padded.writeInt16LE(lastSample, offset);
-    }
-    remainder = Buffer.alloc(0);
-    return encode24kPcmToMulaw(padded);
-  }
-
-  function reset() {
-    remainder = Buffer.alloc(0);
-  }
-
-  return { push, flush, reset };
-}
-
 function linearToMulaw(pcm) {
   const BIAS = 0x84;
   const CLIP = 32635;
