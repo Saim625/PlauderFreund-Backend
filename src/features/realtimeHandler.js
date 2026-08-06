@@ -58,6 +58,15 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
   let textChunkCount = 0;
   let lastProcessedContextId = null;
   let voiceConfig;
+  let ttsTextBuffer = "";
+  let ttsPhraseTimer = null;
+
+  // Let ElevenLabs see a short phrase rather than individual model tokens.
+  // This preserves natural prosody while adding at most this much first-audio
+  // latency when no punctuation is available yet.
+  const TTS_PHRASE_WAIT_MS = 180;
+  const TTS_MIN_TIMED_PHRASE_CHARS = 20;
+  const TTS_MAX_PHRASE_CHARS = 90;
 
   let userMessageCount = 0;
   const REMINDER_TRIGGER_AFTER_MESSAGES = 3;
@@ -95,6 +104,90 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
     } catch (err) {
       logger.error(`❌ [${sessionId}] Error forwarding audio to GPT:`, err);
     }
+  }
+
+  function clearTtsPhraseTimer() {
+    if (!ttsPhraseTimer) return;
+    clearTimeout(ttsPhraseTimer);
+    ttsPhraseTimer = null;
+  }
+
+  function resetTtsPhraseBuffer() {
+    clearTtsPhraseTimer();
+    ttsTextBuffer = "";
+  }
+
+  function nextTtsPhrase({ force = false, timed = false } = {}) {
+    if (!ttsTextBuffer) return null;
+    if (force) {
+      const phrase = ttsTextBuffer;
+      ttsTextBuffer = "";
+      return phrase;
+    }
+
+    // Prefer a sentence or clause boundary. The whitespace is retained so
+    // ElevenLabs receives naturally separated words.
+    const boundary = /[.!?;:](?:\s|$)/.exec(ttsTextBuffer);
+    if (boundary) {
+      const end = boundary.index + boundary[0].length;
+      const phrase = ttsTextBuffer.slice(0, end);
+      ttsTextBuffer = ttsTextBuffer.slice(end);
+      return phrase;
+    }
+
+    // A comma is useful once we have enough context for natural phrasing.
+    if (ttsTextBuffer.length >= TTS_MIN_TIMED_PHRASE_CHARS) {
+      const comma = ttsTextBuffer.lastIndexOf(",");
+      if (comma >= TTS_MIN_TIMED_PHRASE_CHARS - 1) {
+        const phrase = ttsTextBuffer.slice(0, comma + 1);
+        ttsTextBuffer = ttsTextBuffer.slice(comma + 1);
+        return phrase;
+      }
+    }
+
+    // Keep response latency bounded even if the model has not emitted
+    // punctuation. Never split in the middle of a word.
+    const shouldSplit =
+      ttsTextBuffer.length >= TTS_MAX_PHRASE_CHARS ||
+      (timed && ttsTextBuffer.length >= TTS_MIN_TIMED_PHRASE_CHARS);
+    if (!shouldSplit) return null;
+
+    const limit = Math.min(ttsTextBuffer.length, TTS_MAX_PHRASE_CHARS);
+    const splitAt = ttsTextBuffer.lastIndexOf(" ", limit);
+    if (splitAt <= 0) return null;
+
+    const phrase = ttsTextBuffer.slice(0, splitAt + 1);
+    ttsTextBuffer = ttsTextBuffer.slice(splitAt + 1);
+    return phrase;
+  }
+
+  function flushTtsPhrases({ keepTimer = false, ...options } = {}) {
+    if (!keepTimer) clearTtsPhraseTimer();
+
+    const connection = getConnectionForUser(sessionId);
+    if (!connection?.contextId) return false;
+
+    let sentAny = false;
+    let phrase;
+    while ((phrase = nextTtsPhrase(options))) {
+      const sendResult = connection.sendText(phrase);
+      if (!sendResult) {
+        logger.error(`❌ [${sessionId}] Failed to send buffered TTS phrase`);
+        return sentAny;
+      }
+      addRealtimeAudioChars(sessionId, phrase.length);
+      sentAny = true;
+    }
+    return sentAny;
+  }
+
+  function scheduleTtsPhraseFlush() {
+    if (ttsPhraseTimer || !ttsTextBuffer) return;
+    ttsPhraseTimer = setTimeout(() => {
+      ttsPhraseTimer = null;
+      flushTtsPhrases({ timed: true });
+      if (ttsTextBuffer) scheduleTtsPhraseFlush();
+    }, TTS_PHRASE_WAIT_MS);
   }
 
   async function loadMemoryAndSummaries() {
@@ -212,6 +305,7 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
 
           socket.emit("ai-interrupt");
           ttsAudioTransport?.interrupt();
+          resetTtsPhraseBuffer();
 
           if (currentResponseId) {
             gptWs.send(JSON.stringify({ type: "response.cancel" }));
@@ -279,6 +373,7 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
       if (event.type === "response.created") {
         currentResponseId = event.response?.id;
         textChunkCount = 0;
+        resetTtsPhraseBuffer();
 
         const connection = getConnectionForUser(sessionId);
 
@@ -321,33 +416,13 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
         const textChunk = event.delta;
 
         textChunkCount++;
+        if (!textChunk) return;
 
-        const connection = getConnectionForUser(sessionId);
-
-        if (!connection) {
-          logger.error(
-            `❌ [${sessionId}] No connection for text chunk #${textChunkCount}`,
-          );
-
-          return;
-        }
-
-        if (!connection.contextId) {
-          logger.error(`❌ Cannot send text - no active context`);
-          return;
-        }
-
-        const sendResult = connection.sendText(textChunk);
-
-        if (sendResult && textChunk) {
-          addRealtimeAudioChars(sessionId, textChunk.length);
-        }
-
-        if (!sendResult) {
-          logger.error(
-            `❌ [${sessionId}] Failed to send text chunk #${textChunkCount}`,
-          );
-        }
+        ttsTextBuffer += textChunk;
+        // Keep an already-running timer: this is a maximum wait from the
+        // first token, not a debounce that can delay speech indefinitely.
+        flushTtsPhrases({ keepTimer: true });
+        if (ttsTextBuffer) scheduleTtsPhraseFlush();
       }
 
       /* ---------------------------------------------------------------------- */
@@ -366,6 +441,7 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
         const connection = getConnectionForUser(sessionId);
 
         if (connection && connection.contextId) {
+          flushTtsPhrases({ force: true });
           connection.sendText("", { flush: true });
         }
       }
@@ -405,6 +481,7 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
       if (event.type === "response.cancelled") {
         currentResponseId = null;
         textChunkCount = 0;
+        resetTtsPhraseBuffer();
       }
 
       /* ---------------------------------------------------------------------- */
@@ -782,6 +859,7 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
 
   socket.on("disconnect", async () => {
     logger.info(`🔌 [${sessionId}] User disconnected`);
+    resetTtsPhraseBuffer();
 
     try {
       await prisma.userAccessToken.update({
