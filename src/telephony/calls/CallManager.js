@@ -67,7 +67,7 @@ class CallManager {
       sessionRegistry.register(user.token, sessionId);
       setSession(user.token, mockSocket);
 
-      const aiReady = handleRealtimeAI(mockSocket, user.token, timezone, {
+      const aiReady = handleRealtimeAI(mockSocket, user.token, {
         deferConversationStart: true,
       });
 
