@@ -3,6 +3,11 @@ import { RTPReceiver } from "../media/RTPReceiver.js";
 import { RTPSender } from "../media/RTPSender.js";
 import { ExternalMedia } from "../media/ExternalMedia.js";
 
+const methods = Object.getOwnPropertyNames(
+  Object.getPrototypeOf(ariClient.channels),
+);
+console.log("👉 Available ARI Channel Methods:", methods);
+
 export class CallSession {
   constructor(channel, user) {
     this.channelId = channel.id;
