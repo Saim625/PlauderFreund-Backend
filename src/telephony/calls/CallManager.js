@@ -71,7 +71,9 @@ class CallManager {
         deferConversationStart: true,
       });
 
+      console.log(`☎️ About to answer: ${Date.now()}`);
       await session.answer();
+      console.log(`☎️ Answer completed: ${Date.now()}`);
 
       const rtpReady = await session.waitForRtpTarget(4000);
       if (!rtpReady) {
