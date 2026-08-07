@@ -12,7 +12,6 @@ export class CallSession {
     this.isActive = true;
     this.greetingAudio = null;
     this.greetingAudioFormat = "pcm_24000";
-    this.channelController = ariClient.Channel(this.channelId);
 
     const mediaLabel = `Call:${this.channelId}`;
     // Let the OS allocate an isolated UDP port so concurrent calls cannot
@@ -51,16 +50,17 @@ export class CallSession {
   }
 
   async startRinging() {
-    await this.channelController.ring();
+    await ariClient.channels.ring(this.channelId);
   }
 
   async stopRinging() {
-    await this.channelController.ringStop();
+    await ariClient.channels.ringStop(this.channelId);
   }
 
   async answer() {
     try {
-      await this.channelController.answer();
+      const channelController = ariClient.Channel(this.channelId);
+      await channelController.answer();
     } catch (error) {
       console.error(
         `❌ [Session ${this.channelId}] Error answering call:`,
