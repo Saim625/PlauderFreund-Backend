@@ -54,6 +54,8 @@ class CallManager {
       session.greetingAudioFormat = greeting.outputFormat;
 
       this.activeSessions.set(channelId, session);
+
+      await session.startRinging();
       await session.prepare();
 
       const mockSocket = new TelephonySocketAdapter(
@@ -71,13 +73,11 @@ class CallManager {
         deferConversationStart: true,
       });
 
+      await session.stopRinging();
+
       await session.answer();
 
-      console.log("Moving towards rtp ready");
-
       const rtpReady = await session.waitForRtpTarget(4000);
-
-      console.log("rtp ready");
 
       if (!rtpReady) {
         console.warn(
@@ -87,14 +87,9 @@ class CallManager {
 
       setReengagementBlocked(sessionId, true);
 
-      console.log("setReengagementBlocked Done!!!!");
-
       markAiSpeaking(sessionId);
 
-      console.log("going to play greeting");
-
       await session.playGreeting();
-      console.log("Greeting played!!!!");
 
       markAiPlaybackDone(sessionId);
       setReengagementBlocked(sessionId, false);
@@ -102,7 +97,6 @@ class CallManager {
       await aiReady;
 
       mockSocket.emit("conversation-started");
-      console.log(`📞 [CallManager] Call live — AI ready for ${sessionId}`);
     } catch (error) {
       console.error(`❌ [CallManager] Error setting up call session:`, error);
     }
