@@ -64,6 +64,8 @@ export class CallSession {
   async playGreeting() {
     if (!this.greetingAudio) return;
 
+    this.rtpSender.sendSilence(250);
+
     this.rtpSender.sendGreeting(this.greetingAudio, this.greetingAudioFormat);
 
     return new Promise((resolve) => {

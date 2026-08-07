@@ -69,6 +69,16 @@ export class RTPSender {
     });
   }
 
+  sendSilence(durationMs = 250) {
+    const frameCount = Math.ceil(durationMs / 20);
+
+    for (let i = 0; i < frameCount; i++) {
+      this.frameQueue.push(Buffer.alloc(160, 0xff));
+    }
+
+    this._ensurePacing();
+  }
+
   sendAudio(audioBuffer) {
     if (!audioBuffer?.length) return;
 

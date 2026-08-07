@@ -80,8 +80,6 @@ class CallManager {
         );
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
       setReengagementBlocked(sessionId, true);
       markAiSpeaking(sessionId);
       await session.playGreeting();
