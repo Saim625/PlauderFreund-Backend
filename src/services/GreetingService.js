@@ -12,7 +12,10 @@ import { sessionRegistry } from "./sessionRegistry.js";
 
 const MAX_GREETING_HISTORY = 3;
 
-export async function generateGreeting(token, { outputFormat = "pcm_24000" } = {}) {
+export async function generateGreeting(
+  token,
+  { outputFormat = "pcm_24000" } = {},
+) {
   try {
     // ✅ Validate token exists before doing anything
     const userExists = await prisma.userAccessToken.findUnique({
@@ -50,7 +53,6 @@ export async function generateGreeting(token, { outputFormat = "pcm_24000" } = {
       where: { userToken: token },
     });
     const chatModel = personalityConfig?.chatModel || "gpt-4o-mini";
-    console.log("Chat model for greeting generation:", chatModel);
 
     const prompt = [
       {
@@ -120,7 +122,6 @@ ${previousGreetingsText}`,
     const audioBuffer = await generateGreetingAudio(greetingText, voiceConfig, {
       outputFormat,
     });
-    console.log("Greeting Chars: ", greetingText.length);
 
     // Track greeting audio characters
     if (sessionId) {

@@ -13,18 +13,12 @@ export class UserLookup {
     const normalizedNumber = rawPhoneNumber.trim();
 
     try {
-      console.log(
-        `🔍 [UserLookup] Searching Prisma DB for number: "${normalizedNumber}"...`,
-      );
-
       // 2. Fetch User and eager-load all relevant history
       const user = await prisma.userAccessToken.findUnique({
         where: {
           number: normalizedNumber,
         },
       });
-
-      console.log("USER:", user);
 
       if (!user) {
         console.warn(
@@ -41,9 +35,6 @@ export class UserLookup {
         return null;
       }
 
-      console.log(
-        `✅ [UserLookup] Found User ID #${user.id} (Token: ${user.token.substring(0, 8)}...)`,
-      );
       return user;
     } catch (error) {
       console.error(`❌ [UserLookup] Database query failed:`, error);

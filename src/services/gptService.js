@@ -16,7 +16,6 @@ export async function getGPTResponse(messages, model = "gpt-4o-mini") {
     // Extract text output
     const content = completion.choices[0]?.message?.content;
     const usage = completion.usage || null;
-    console.log("Chat Completion APi Usage: ", usage);
 
     return {
       content: content ? content.trim() : null,

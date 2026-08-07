@@ -20,7 +20,6 @@ export async function initializeAriGateway() {
       }
       // Ignore external media RTP channels spawned by Asterisk
       if (chan?.name?.includes("UnicastRTP")) {
-        console.log(`ℹ️ [ariEvents] Ignoring internal RTP channel: ${chan.id}`);
         return;
       }
       await CallManager.handleIncomingCall(event);

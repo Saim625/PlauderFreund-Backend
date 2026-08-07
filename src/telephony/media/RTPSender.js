@@ -37,9 +37,6 @@ export class RTPSender {
     if (host) this.targetHost = host;
     if (port) this.targetPort = port;
     this._targetSet = true;
-    console.log(
-      `🎯 [${this.label}] RTP return path set → ${this.targetHost}:${this.targetPort}`,
-    );
 
     if (this._preTargetBuffer.length > 0) {
       const buffered = this._preTargetBuffer;

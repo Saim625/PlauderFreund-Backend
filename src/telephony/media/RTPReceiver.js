@@ -48,9 +48,6 @@ export class RTPReceiver extends EventEmitter {
         this.socket?.off("error", onError);
         this.isListening = true;
         this.port = this.socket.address().port;
-        console.log(
-          `🎧 [${this.label}] Listening for incoming audio on UDP 127.0.0.1:${this.port}`,
-        );
         resolve(this.port);
       };
 

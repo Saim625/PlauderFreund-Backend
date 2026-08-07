@@ -27,18 +27,10 @@ export class ExternalMedia extends EventEmitter {
         type: "mixing",
       });
 
-      console.log(
-        `🌉 [ExternalMedia] Mixing bridge created: ${this.bridge.id}`,
-      );
-
       // 3. Add both channels to the bridge
       await ariClient.bridges.addChannels(this.bridge.id, {
         channel: [callChannelId, this.channel.id],
       });
-
-      console.log(
-        `🔗 [ExternalMedia] Successfully bridged call (${callChannelId}) <-> ExternalMedia (${this.channel.id})`,
-      );
 
       return {
         externalChannelId: this.channel.id,
@@ -56,18 +48,11 @@ export class ExternalMedia extends EventEmitter {
   async destroy() {
     try {
       if (this.bridge) {
-        console.log(
-          `🧹 [ExternalMedia] Destroying mixing bridge: ${this.bridge.id}...`,
-        );
         await ariClient.bridges.destroy(this.bridge.id);
-        console.log("✅ Bridge destroyed");
         this.bridge = null;
       }
 
       if (this.channel) {
-        console.log(
-          `🧹 [ExternalMedia] Hanging up external channel: ${this.channel.id}...`,
-        );
         await ariClient.channels.hangup(this.channel.id);
         this.channel = null;
       }

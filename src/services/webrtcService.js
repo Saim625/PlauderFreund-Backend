@@ -405,7 +405,6 @@ export function createWebRtcSession(socket, sessionId, { onAudioBase64 } = {}) {
       session.audioTrack = track;
       session.useWebRtcAudio = true;
 
-      logger.info(`🎧 [${sessionId}] WebRTC audio track received`);
       socket.emit("webrtc-connected");
 
       const sink = new wrtc.nonstandard.RTCAudioSink(track);

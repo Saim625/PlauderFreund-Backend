@@ -26,9 +26,6 @@ export function createMediaStats(label) {
       if (!firstPacketLogged) {
         firstPacketLogged = true;
         const source = rinfo ? `${rinfo.address}:${rinfo.port}` : "unknown";
-        console.log(
-          `✅ [${label}] First RTP packet (${payloadBytes} bytes) from ${source}`,
-        );
       }
     },
 
