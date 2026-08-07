@@ -71,9 +71,7 @@ class CallManager {
         deferConversationStart: true,
       });
 
-      console.log(`☎️ About to answer: ${Date.now()}`);
       await session.answer();
-      console.log(`☎️ Answer completed: ${Date.now()}`);
 
       const rtpReady = await session.waitForRtpTarget(4000);
       if (!rtpReady) {
@@ -81,6 +79,8 @@ class CallManager {
           `⚠️ [CallManager] RTP return path not learned in time for ${channelId}; greeting may be delayed`,
         );
       }
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       setReengagementBlocked(sessionId, true);
       markAiSpeaking(sessionId);

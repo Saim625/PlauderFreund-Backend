@@ -31,7 +31,6 @@ export class RTPSender {
     this.idleCallbacks = [];
     this._preTargetBuffer = Buffer.alloc(0);
     this._prerollFrames = 4;
-    this._firstGreetingPacketLogged = false;
   }
 
   setTarget(host, port) {
@@ -87,10 +86,6 @@ export class RTPSender {
   }
 
   sendGreeting(audioBuffer, inputFormat = "pcm_24000") {
-    this._firstGreetingPacketLogged = false;
-
-    console.log(`🎵 sendGreeting() called at ${Date.now()}`);
-
     const ulaw =
       inputFormat === "ulaw_8000"
         ? audioBuffer
@@ -138,8 +133,6 @@ export class RTPSender {
       callback();
       return;
     }
-
-    console.log(`✅ Greeting RTP finished at ${Date.now()}`);
 
     this.idleCallbacks.push(callback);
     this._ensurePacing();
@@ -220,11 +213,6 @@ export class RTPSender {
     );
 
     this.timestamp += FRAME_SIZE;
-
-    if (!this._firstGreetingPacketLogged) {
-      this._firstGreetingPacketLogged = true;
-      console.log(`📤 First RTP packet sent at ${Date.now()}`);
-    }
 
     this.stats.recordOutbound(FRAME_SIZE, this.targetHost, this.targetPort);
 
