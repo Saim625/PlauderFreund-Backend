@@ -51,6 +51,7 @@ export class CallSession {
 
   async answer() {
     try {
+      console.log("Call Answered!!!!!");
       const channelController = ariClient.Channel(this.channelId);
       await channelController.answer();
     } catch (error) {
