@@ -50,24 +50,17 @@ export class CallSession {
   }
 
   async startRinging() {
-    console.log("👉 TYPE:", typeof ariClient?.channels);
-    if (ariClient?.channels) {
-      console.log(
-        "👉 METHODS:",
-        Object.getOwnPropertyNames(Object.getPrototypeOf(ariClient.channels)),
-      );
-    }
-    await ariClient.channels.ring(this.channelId);
+    await ariClient.channels.ringChannel(this.channelId);
   }
 
   async stopRinging() {
-    await ariClient.channels.ringStop(this.channelId);
+    await ariClient.channels.stopRingChannel(this.channelId);
   }
 
   async answer() {
     try {
       const channelController = ariClient.Channel(this.channelId);
-      await channelController.answer();
+      await channelController.answerChannel();
     } catch (error) {
       console.error(
         `❌ [Session ${this.channelId}] Error answering call:`,
