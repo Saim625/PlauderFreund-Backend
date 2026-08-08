@@ -266,11 +266,15 @@ ${personalityInstructions}
       let data;
       try {
         data = JSON.parse(msg.toString());
-      } catch {
+      } catch (err) {
+        console.error("❌ Failed to parse WebSocket message:", msg.toString());
         return;
       }
+
       if (data.type === "error") {
-        logger.error("Realtime API error:", data);
+        console.error("❌ Realtime API error:");
+        console.error("Raw message:", msg.toString());
+        console.error("Parsed error:", JSON.stringify(data, null, 2));
 
         ws.close();
       }
