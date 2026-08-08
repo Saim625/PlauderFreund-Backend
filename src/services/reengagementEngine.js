@@ -62,7 +62,7 @@ export function markUserAudio(socketId) {
     s.cooldownUntil = 0;
 
     logger.info(
-      `🎤 [${socketId}] User audio detected at ${new Date(now).toISOString()}`
+      `🎤 [${socketId}] User audio detected at ${new Date(now).toISOString()}`,
     );
   }
 }
@@ -76,7 +76,7 @@ export function markUserSpeaking(socketId, isSpeaking) {
 
     const status = isSpeaking ? "started" : "stopped";
     logger.info(
-      `🎤 [${socketId}] User ${status} speaking at ${new Date().toISOString()}`
+      `🎤 [${socketId}] User ${status} speaking at ${new Date().toISOString()}`,
     );
   }
 }
@@ -88,7 +88,7 @@ export function markAiSpeaking(socketId) {
     if (!s.aiIsSpeaking) {
       s.aiIsSpeaking = true;
       logger.info(
-        `🤖 [${socketId}] AI started speaking at ${new Date().toISOString()}`
+        `🤖 [${socketId}] AI started speaking at ${new Date().toISOString()}`,
       );
     }
   }
@@ -100,15 +100,6 @@ export function markAiPlaybackDone(socketId) {
     const now = Date.now();
     s.aiIsSpeaking = false;
     s.lastAiPlaybackFinishedAt = now;
-
-    logger.info(
-      `✅ [${socketId}] AI playback finished at ${new Date(now).toISOString()}`
-    );
-    logger.info(
-        `   → Re-engagement will trigger after ${REENGAGEMENT_SILENCE_MS / 1000}s of silence (at ${new Date(
-        now + REENGAGEMENT_SILENCE_MS
-      ).toISOString()})`
-    );
   }
 }
 
@@ -119,8 +110,8 @@ export function markReengagementTriggered(socketId) {
     s.cooldownUntil = cooldownEnd;
     logger.info(
       `🔄 [${socketId}] Re-engagement triggered. Cooldown until ${new Date(
-        cooldownEnd
-      ).toISOString()}`
+        cooldownEnd,
+      ).toISOString()}`,
     );
   }
 }
@@ -137,14 +128,14 @@ export function startReengagementLoop(triggerFn) {
 
     if (shouldLogStatus) {
       logger.info(
-        `🔁 [REENGAGEMENT LOOP] Check #${loopCount} - Active sessions: ${sessions.size}`
+        `🔁 [REENGAGEMENT LOOP] Check #${loopCount} - Active sessions: ${sessions.size}`,
       );
     }
 
     for (const [socketId, s] of sessions.entries()) {
       const lastActivity = Math.max(
         s.lastUserAudioAt,
-        s.lastAiPlaybackFinishedAt
+        s.lastAiPlaybackFinishedAt,
       );
 
       const silentFor = now - lastActivity;
@@ -185,7 +176,7 @@ export function startReengagementLoop(triggerFn) {
         const cooldownRemaining = Math.ceil((s.cooldownUntil - now) / 1000);
         if (shouldLogStatus) {
           logger.info(
-            `   [${socketId}] BLOCKED: In cooldown (${cooldownRemaining}s remaining)`
+            `   [${socketId}] BLOCKED: In cooldown (${cooldownRemaining}s remaining)`,
           );
         }
         continue;
@@ -194,7 +185,7 @@ export function startReengagementLoop(triggerFn) {
       if (silentFor < REENGAGEMENT_SILENCE_MS) {
         if (shouldLogStatus) {
           logger.info(
-            `   [${socketId}] WAITING: Silent for ${silentForSeconds}s (need ${Math.floor(REENGAGEMENT_SILENCE_MS / 1000)}s)`
+            `   [${socketId}] WAITING: Silent for ${silentForSeconds}s (need ${Math.floor(REENGAGEMENT_SILENCE_MS / 1000)}s)`,
           );
         }
         continue;
@@ -202,15 +193,15 @@ export function startReengagementLoop(triggerFn) {
 
       // 🔥 All conditions met - trigger re-engagement!
       logger.info(
-        `🚨 [${socketId}] RE-ENGAGEMENT TRIGGERED! (silent for ${silentForSeconds}s)`
+        `🚨 [${socketId}] RE-ENGAGEMENT TRIGGERED! (silent for ${silentForSeconds}s)`,
       );
       logger.info(
-        `   Last user audio: ${new Date(s.lastUserAudioAt).toISOString()}`
+        `   Last user audio: ${new Date(s.lastUserAudioAt).toISOString()}`,
       );
       logger.info(
         `   Last AI playback: ${new Date(
-          s.lastAiPlaybackFinishedAt
-        ).toISOString()}`
+          s.lastAiPlaybackFinishedAt,
+        ).toISOString()}`,
       );
 
       const directTrigger = reengagementTriggers.get(socketId);
@@ -237,7 +228,7 @@ export function getSessionState(socketId) {
     cooldownRemainingMs: Math.max(0, s.cooldownUntil - now),
     lastUserAudioAt: new Date(s.lastUserAudioAt).toISOString(),
     lastAiPlaybackFinishedAt: new Date(
-      s.lastAiPlaybackFinishedAt
+      s.lastAiPlaybackFinishedAt,
     ).toISOString(),
   };
 }

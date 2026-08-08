@@ -158,9 +158,6 @@ class ElevenLabsConnection {
 
       if (finalContextId) {
         this.audioTransport.pushComplete({ contextId: finalContextId });
-        logger.info(
-          `✅ [${this.userId}] Audio stream complete for context: ${finalContextId}`,
-        );
       } else {
         logger.warn(
           `⚠️ [${this.userId}] Received isFinal but contextId is null`,
@@ -307,7 +304,6 @@ class ElevenLabsConnection {
 
     try {
       this.ws.send(JSON.stringify(initMsg));
-      logger.info(`✅ [${this.userId}] Context started: ${this.contextId}`);
       return this.contextId;
     } catch (error) {
       logger.error(`❌ [${this.userId}] Error starting context:`, error);

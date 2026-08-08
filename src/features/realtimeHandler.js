@@ -290,17 +290,17 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
       /* ---------------------------------------------------------------------- */
 
       if (event.type === "input_audio_buffer.speech_started") {
+        console.log(
+          `🎤 speech_started | currentResponseId=${currentResponseId}`,
+        );
+
         const connection = getConnectionForUser(sessionId);
 
         markUserSpeaking(sessionId, true);
 
-        logger.info(
-          `🎤 [${sessionId}] User started speaking - activity updated`,
-        );
-
         if (connection && connection.contextId) {
-          logger.info(
-            `🛑 [${sessionId}] User interrupted - canceling AI response`,
+          console.log(
+            `🛑 Attempting response.cancel | currentResponseId=${currentResponseId}`,
           );
 
           socket.emit("ai-interrupt");
@@ -308,7 +308,15 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
           resetTtsPhraseBuffer();
 
           if (currentResponseId) {
-            gptWs.send(JSON.stringify({ type: "response.cancel" }));
+            console.log(`📤 Sending response.cancel for ${currentResponseId}`);
+
+            gptWs.send(
+              JSON.stringify({
+                type: "response.cancel",
+              }),
+            );
+          } else {
+            console.log(`ℹ️ No current response — NOT sending response.cancel`);
           }
 
           connection.closeContext();
@@ -324,8 +332,6 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
 
       if (event.type === "input_audio_buffer.speech_stopped") {
         markUserSpeaking(sessionId, false);
-
-        logger.info(`🛑 [${sessionId}] User stopped speaking`);
       }
 
       /* ---------------------------------------------------------------------- */
@@ -371,6 +377,7 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
       /* ---------------------------------------------------------------------- */
 
       if (event.type === "response.created") {
+        console.log(`🟢 response.created → ${event.response?.id}`);
         currentResponseId = event.response?.id;
         textChunkCount = 0;
         resetTtsPhraseBuffer();
@@ -451,6 +458,9 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
       /* ---------------------------------------------------------------------- */
 
       if (event.type === "response.done") {
+        console.log(
+          `✅ response.done → ${event.response?.id} | currentResponseId=${currentResponseId}`,
+        );
         socket.emit("ai-response-done", {
           response: event.response,
         });
@@ -460,10 +470,6 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
         markReminderSlotFreeForNextResponse(sessionId);
 
         const usage = event.response?.usage;
-
-        logger.info(
-          `RealTime USAGE DETAILS: ${JSON.stringify(usage, null, 2)}`,
-        );
 
         if (usage) {
           addRealtimeTokens(
@@ -479,6 +485,10 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
       /* ---------------------------------------------------------------------- */
 
       if (event.type === "response.cancelled") {
+        console.log(
+          `🟡 response.cancelled → ${event.response?.id} | currentResponseId=${currentResponseId}`,
+        );
+
         currentResponseId = null;
         textChunkCount = 0;
         resetTtsPhraseBuffer();
@@ -810,10 +820,6 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
   });
 
   socket.on("ai-audio-done", ({ contextId }) => {
-    logger.info(
-      `🔊 [${sessionId}] Frontend confirmed playback done at ${new Date().toISOString()}`,
-    );
-
     if (lastProcessedContextId === contextId) {
       logger.warn(
         `⚠️ [${sessionId}] Duplicate ai-audio-done for context ${contextId}`,
@@ -832,9 +838,7 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
     }
 
     if (contextId !== connection.contextId) {
-      logger.warn(
-        `⚠️ [${sessionId}] Context mismatch. Received=${contextId}, Active=${connection.contextId}`,
-      );
+      return;
     }
 
     if (contextId === connection.contextId) {
@@ -844,10 +848,6 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
     textChunkCount = 0;
 
     markAiPlaybackDone(sessionId);
-
-    logger.info(
-      `✅ [${sessionId}] Playback marked as done. Re-engagement timer starts now.`,
-    );
   });
 
   socket.on("disconnect", async () => {
