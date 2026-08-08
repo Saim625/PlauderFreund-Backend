@@ -272,13 +272,21 @@ ${personalityInstructions}
       }
 
       if (data.type === "error") {
-        console.error("❌ Realtime API error:");
-        console.error("Raw message:", msg.toString());
-        console.error("Parsed error:", JSON.stringify(data, null, 2));
+        const code = data.error?.code;
+
+        logger.error(`❌ Realtime API error: ${JSON.stringify(data, null, 2)}`);
+
+        if (code === "response_cancel_not_active") {
+          console.warn(
+            "⚠️ Response was already inactive when cancellation was requested.",
+          );
+
+          currentResponseId = null;
+          return;
+        }
 
         ws.close();
       }
-
       /* ---- Model is ready ---- */
       if (data.type === "session.created") {
         modelReady = true;

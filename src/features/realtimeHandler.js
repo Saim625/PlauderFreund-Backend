@@ -60,6 +60,7 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
   let voiceConfig;
   let ttsTextBuffer = "";
   let ttsPhraseTimer = null;
+  let responseActive = false;
 
   // Let ElevenLabs see a short phrase rather than individual model tokens.
   // This preserves natural prosody while adding at most this much first-audio
@@ -307,9 +308,7 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
           ttsAudioTransport?.interrupt();
           resetTtsPhraseBuffer();
 
-          if (currentResponseId) {
-            console.log(`📤 Sending response.cancel for ${currentResponseId}`);
-
+          if (responseActive && currentResponseId) {
             gptWs.send(
               JSON.stringify({
                 type: "response.cancel",
@@ -377,8 +376,8 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
       /* ---------------------------------------------------------------------- */
 
       if (event.type === "response.created") {
-        console.log(`🟢 response.created → ${event.response?.id}`);
         currentResponseId = event.response?.id;
+        responseActive = true;
         textChunkCount = 0;
         resetTtsPhraseBuffer();
 
@@ -458,14 +457,12 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
       /* ---------------------------------------------------------------------- */
 
       if (event.type === "response.done") {
-        console.log(
-          `✅ response.done → ${event.response?.id} | currentResponseId=${currentResponseId}`,
-        );
+        responseActive = false;
+        currentResponseId = null;
+
         socket.emit("ai-response-done", {
           response: event.response,
         });
-
-        currentResponseId = null;
 
         markReminderSlotFreeForNextResponse(sessionId);
 
@@ -485,10 +482,7 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
       /* ---------------------------------------------------------------------- */
 
       if (event.type === "response.cancelled") {
-        console.log(
-          `🟡 response.cancelled → ${event.response?.id} | currentResponseId=${currentResponseId}`,
-        );
-
+        responseActive = false;
         currentResponseId = null;
         textChunkCount = 0;
         resetTtsPhraseBuffer();
