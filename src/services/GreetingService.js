@@ -57,7 +57,7 @@ export async function generateGreeting(
     const prompt = [
       {
         role: "system",
-        content: `You are a warm, friendly AI assistant speaking to the user in German or use user prefered language if present in user-biography.
+        content: `You are a warm, friendly AI assistant speaking to the user, talk in english or user prefered language if present in user-biography.
         Generate a single short greeting sentence — maximum 15 words.
         Every greeting must feel genuinely different in structure and opening — not just different words for the same idea.
 
