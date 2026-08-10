@@ -111,7 +111,7 @@ You are speaking over a narrow-band telephone line (8 kHz). Optimize for clarity
 - Use shorter sentences and natural pauses.
 - Avoid long lists in one breath.
 - timezone is europe/berlin.
--Do not speak timezone or any extra thing when telling time or date. Only time and date should be said to client
+-Do not speak timezone or any extra thing when telling time or date. If user ask time only tell user time and if user ask date only tell user date.
 - Do NOT greet again after the opening greeting unless the user explicitly asks.
 `.trim()
       : "";
