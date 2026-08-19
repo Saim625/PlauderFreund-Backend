@@ -1,6 +1,7 @@
 import prisma from "../lib/db.js";
 import logger from "./logger.js";
 import { maybeInjectNextReminder } from "../services/reminderQueue.js";
+import { WebSearchService } from "../services/WebSearchService.js";
 
 function resolveTimezoneArg(timezone) {
   if (timezone && typeof timezone === "object" && "value" in timezone) {
@@ -9,7 +10,7 @@ function resolveTimezoneArg(timezone) {
   return timezone;
 }
 
-async function sendToolResult(
+export async function sendToolResult(
   gptWs,
   callId,
   sessionId,
@@ -226,13 +227,7 @@ async function handleUpdatePersonalityPreference(
   await sendToolResult(gptWs, callId, sessionId, token);
 }
 
-async function handleGetCurrentTime(
-  callId,
-  sessionId,
-  token,
-  timezone,
-  gptWs,
-) {
+async function handleGetCurrentTime(callId, sessionId, token, timezone, gptWs) {
   const now = new Date();
   const safeTimezone = resolveTimezoneArg(timezone) || "UTC";
 
@@ -256,6 +251,22 @@ async function handleGetCurrentTime(
   );
 }
 
+async function handleWebSearch(args, callId, sessionId, token, gptWs) {
+  try {
+    const result = await WebSearchService.search(args.query);
+
+    await sendToolResult(gptWs, callId, sessionId, token, true, {
+      result: result.answer,
+    });
+  } catch (err) {
+    logger.error("❌ Web search failed:", err);
+
+    await sendToolResult(gptWs, callId, sessionId, token, false, {
+      message: "Sorry, I couldn't complete the web search.",
+    });
+  }
+}
+
 export async function handleToolCall(event, sessionId, token, gptWs, timezone) {
   const { name, call_id, arguments: rawArgs } = event;
 
@@ -273,6 +284,10 @@ export async function handleToolCall(event, sessionId, token, gptWs, timezone) {
   switch (name) {
     case "get_user_reminders":
       await handleGetUserReminders(args, call_id, token, gptWs, timezone);
+      break;
+
+    case "web_search":
+      await handleWebSearch(args, call_id, sessionId, token, gptWs);
       break;
 
     case "update_personality_preferences":
