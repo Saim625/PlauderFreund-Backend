@@ -4,9 +4,10 @@ import logger from "../utils/logger.js";
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
-
+c;
 export class WebSearchService {
   static async search(query, model) {
+    console.log("Model: ", model);
     const selectedModel = model || "gpt-4.1-mini";
 
     logger.info(`🔎 Web Search: "${query}"`);
