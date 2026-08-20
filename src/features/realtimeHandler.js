@@ -61,6 +61,7 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
   let ttsTextBuffer = "";
   let ttsPhraseTimer = null;
   let responseActive = false;
+  let personalityConfig;
 
   // Let ElevenLabs see a short phrase rather than individual model tokens.
   // This preserves natural prosody while adding at most this much first-audio
@@ -494,7 +495,15 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
 
       if (event.type === "response.function_call_arguments.done") {
         try {
-          await handleToolCall(event, sessionId, token, gptWs, getTimezone());
+          const webSearchModel = personalityConfig?.webSearchModel;
+          await handleToolCall(
+            event,
+            sessionId,
+            token,
+            gptWs,
+            getTimezone(),
+            webSearchModel,
+          );
 
           logger.info(`🛠️ [${sessionId}] Tool call handled successfully`);
         } catch (err) {
@@ -530,12 +539,9 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
   }
 
   async function saveUsageAndCosts() {
-    const config = await prisma.personalityConfig.findUnique({
-      where: { userToken: token },
-    });
-
-    const realtimeModel = config?.realtimeModel || "gpt-realtime-mini";
-    const chatModel = config?.chatModel || "gpt-4o-mini";
+    const realtimeModel =
+      personalityConfig?.realtimeModel || "gpt-realtime-mini";
+    const chatModel = personalityConfig?.chatModel || "gpt-4o-mini";
 
     const endedAt = new Date();
     const durationSeconds = Math.round((endedAt - sessionStartedAt) / 1000);
@@ -691,7 +697,7 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
       };
     }
 
-    const personalityConfig = await prisma.personalityConfig.findUnique({
+    personalityConfig = await prisma.personalityConfig.findUnique({
       where: { userToken: token },
     });
     setReengagementEnabled(

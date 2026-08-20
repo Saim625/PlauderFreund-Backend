@@ -6,13 +6,15 @@ const client = new OpenAI({
 });
 
 export class WebSearchService {
-  static async search(query) {
+  static async search(query, model) {
+    const selectedModel = model || "gpt-4.1-mini";
+
     logger.info(`🔎 Web Search: "${query}"`);
 
     const start = Date.now();
 
     const response = await client.responses.create({
-      model: "gpt-4.1-mini",
+      model: selectedModel,
 
       tools: [
         {

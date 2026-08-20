@@ -251,9 +251,16 @@ async function handleGetCurrentTime(callId, sessionId, token, timezone, gptWs) {
   );
 }
 
-async function handleWebSearch(args, callId, sessionId, token, gptWs) {
+async function handleWebSearch(
+  args,
+  callId,
+  sessionId,
+  token,
+  gptWs,
+  webSearchModel,
+) {
   try {
-    const result = await WebSearchService.search(args.query);
+    const result = await WebSearchService.search(args.query, webSearchModel);
 
     await sendToolResult(gptWs, callId, sessionId, token, true, {
       result: result.answer,
@@ -267,7 +274,14 @@ async function handleWebSearch(args, callId, sessionId, token, gptWs) {
   }
 }
 
-export async function handleToolCall(event, sessionId, token, gptWs, timezone) {
+export async function handleToolCall(
+  event,
+  sessionId,
+  token,
+  gptWs,
+  timezone,
+  webSearchModel,
+) {
   const { name, call_id, arguments: rawArgs } = event;
 
   let args;
@@ -287,7 +301,14 @@ export async function handleToolCall(event, sessionId, token, gptWs, timezone) {
       break;
 
     case "web_search":
-      await handleWebSearch(args, call_id, sessionId, token, gptWs);
+      await handleWebSearch(
+        args,
+        call_id,
+        sessionId,
+        token,
+        gptWs,
+        webSearchModel,
+      );
       break;
 
     case "update_personality_preferences":
