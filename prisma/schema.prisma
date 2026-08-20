@@ -119,6 +119,7 @@ model PersonalityConfig {
   // model selection
   realtimeModel String @default("gpt-realtime-mini") @map("realtime_model")
   chatModel     String @default("gpt-4o-mini")             @map("chat_model")
+  webSearchModel String @default("gpt-4.1-mini")  @map("web_search_model")
   
   isActive                Boolean  @default(true)
   updatedBy               String?
