@@ -4,7 +4,7 @@ import logger from "../utils/logger.js";
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
-c;
+
 export class WebSearchService {
   static async search(query, model) {
     console.log("Model: ", model);
