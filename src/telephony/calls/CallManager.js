@@ -55,8 +55,8 @@ class CallManager {
 
       this.activeSessions.set(channelId, session);
 
-      console.log("Starting ringing: ", Date.now());
-      await session.startRinging();
+      // console.log("Starting ringing: ", Date.now());
+      // await session.startRinging();
 
       console.log("Starting prepare: ", Date.now());
 
@@ -79,13 +79,17 @@ class CallManager {
         deferConversationStart: true,
       });
 
-      console.log("stopping ringtone: ", Date.now());
-
       await session.stopRinging();
 
       console.log("triggering answer(): ", Date.now());
 
       await session.answer();
+
+      await session.startRinging();
+
+      await new Promise((r) => setTimeout(r, 5000));
+
+      console.log("stopping ringtone: ", Date.now());
 
       const rtpReady = await session.waitForRtpTarget(4000);
 
