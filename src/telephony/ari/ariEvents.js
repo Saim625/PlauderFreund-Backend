@@ -13,8 +13,6 @@ export async function initializeAriGateway() {
 
     // Bind incoming events directly to the CallManager
     ariClient.on("StasisStart", async (event) => {
-      console.log("StasisStart state:", event.channel.state);
-      console.log("Channel id:", event.channel.id);
       const chan = event?.channel;
       if (!chan) {
         console.warn("⚠️ [ariEvents] Ignoring StasisStart without a channel");

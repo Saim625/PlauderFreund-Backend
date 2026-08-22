@@ -49,27 +49,18 @@ export class CallSession {
     }
   }
 
-  async startRinging() {
-    await ariClient.channels.ringChannel(this.channelId);
-  }
+  // async startRinging() {
+  //   await ariClient.channels.ringChannel(this.channelId);
+  // }
 
-  async stopRinging() {
-    await ariClient.channels.stopRingChannel(this.channelId);
-  }
+  // async stopRinging() {
+  //   await ariClient.channels.stopRingChannel(this.channelId);
+  // }
 
   async answer() {
     try {
       const channelController = ariClient.Channel(this.channelId);
-
-      console.log(
-        `📞 Before answer(): channel state = ${channelController.state}`,
-      );
-
       await channelController.answer();
-
-      console.log(
-        `📞 After answer(): channel state = ${channelController.state}`,
-      );
     } catch (error) {
       console.error(
         `❌ [Session ${this.channelId}] Error answering call:`,

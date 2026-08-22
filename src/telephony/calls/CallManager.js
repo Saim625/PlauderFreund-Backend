@@ -77,11 +77,11 @@ class CallManager {
 
       await session.answer();
 
-      await session.startRinging();
+      // await session.startRinging();
 
-      await new Promise((r) => setTimeout(r, 5000));
+      // await new Promise((r) => setTimeout(r, 5000));
 
-      await session.stopRinging();
+      // await session.stopRinging();
 
       const rtpReady = await session.waitForRtpTarget(4000);
 
