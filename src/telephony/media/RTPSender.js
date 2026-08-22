@@ -2,11 +2,16 @@ import dgram from "dgram";
 import { RTPUtils } from "../utils/codecs.js";
 import { createMediaStats } from "../utils/telephonyDebug.js";
 import { encode24kPcmToMulaw } from "../utils/AudioResampler.js";
+import fs from "fs";
 
 const ULAW_PAYLOAD_TYPE = 0;
 const FRAME_SIZE = 160; // 20ms @ 8kHz µ-law (1 byte/sample)
 const FRAME_MS = 20;
 const ULAW_SILENCE = 0xff;
+
+const DISCLAIMER_AUDIO = fs.readFileSync(
+  "../../assets/audio/plauderfreund-disclaimer.ulaw",
+);
 
 export class RTPSender {
   constructor(
@@ -90,6 +95,11 @@ export class RTPSender {
     this.pending = Buffer.concat([this.pending, audioBuffer]);
     this._enqueueFullFrames();
     this._ensurePacing();
+  }
+
+  sendDisclaimer() {
+    this.sendAudio(DISCLAIMER_AUDIO);
+    this.flush();
   }
 
   sendGreeting(audioBuffer, inputFormat = "pcm_24000") {

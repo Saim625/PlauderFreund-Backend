@@ -49,14 +49,6 @@ export class CallSession {
     }
   }
 
-  // async startRinging() {
-  //   await ariClient.channels.ringChannel(this.channelId);
-  // }
-
-  // async stopRinging() {
-  //   await ariClient.channels.stopRingChannel(this.channelId);
-  // }
-
   async answer() {
     try {
       const channelController = ariClient.Channel(this.channelId);

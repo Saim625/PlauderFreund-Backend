@@ -55,9 +55,6 @@ class CallManager {
 
       this.activeSessions.set(channelId, session);
 
-      // console.log("Starting ringing: ", Date.now());
-      // await session.startRinging();
-
       await session.prepare();
 
       const mockSocket = new TelephonySocketAdapter(
@@ -77,12 +74,6 @@ class CallManager {
 
       await session.answer();
 
-      // await session.startRinging();
-
-      // await new Promise((r) => setTimeout(r, 5000));
-
-      // await session.stopRinging();
-
       const rtpReady = await session.waitForRtpTarget(4000);
 
       if (!rtpReady) {
@@ -95,7 +86,11 @@ class CallManager {
 
       markAiSpeaking(sessionId);
 
-      await session.playGreeting();
+      session.rtpSender.sendDisclaimer();
+
+      session.rtpSender.whenIdle(() => {
+        session.playGreeting();
+      });
 
       markAiPlaybackDone(sessionId);
       setReengagementBlocked(sessionId, false);
