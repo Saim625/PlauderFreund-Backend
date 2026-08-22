@@ -58,11 +58,7 @@ class CallManager {
       // console.log("Starting ringing: ", Date.now());
       // await session.startRinging();
 
-      console.log("Starting prepare: ", Date.now());
-
       await session.prepare();
-
-      console.log("prepare end: ", Date.now());
 
       const mockSocket = new TelephonySocketAdapter(
         channelId,
@@ -79,17 +75,12 @@ class CallManager {
         deferConversationStart: true,
       });
 
-      console.log("triggering answer(⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️): ", Date.now());
-
       await session.answer();
-
-      console.log("triggerred answer(✅✅✅✅✅✅✅✅✅✅✅✅): ", Date.now());
 
       await session.startRinging();
 
       await new Promise((r) => setTimeout(r, 5000));
 
-      console.log("stopping ringtone: ", Date.now());
       await session.stopRinging();
 
       const rtpReady = await session.waitForRtpTarget(4000);
@@ -103,8 +94,6 @@ class CallManager {
       setReengagementBlocked(sessionId, true);
 
       markAiSpeaking(sessionId);
-
-      console.log("Starting greeting ", Date.now());
 
       await session.playGreeting();
 

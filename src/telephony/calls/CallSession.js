@@ -60,7 +60,16 @@ export class CallSession {
   async answer() {
     try {
       const channelController = ariClient.Channel(this.channelId);
-      await channelController.answerChannel();
+
+      console.log(
+        `📞 Before answer(): channel state = ${channelController.state}`,
+      );
+
+      await channelController.answer();
+
+      console.log(
+        `📞 After answer(): channel state = ${channelController.state}`,
+      );
     } catch (error) {
       console.error(
         `❌ [Session ${this.channelId}] Error answering call:`,
