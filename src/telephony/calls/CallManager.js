@@ -79,17 +79,18 @@ class CallManager {
         deferConversationStart: true,
       });
 
-      await session.stopRinging();
-
-      console.log("triggering answer(): ", Date.now());
+      console.log("triggering answer(⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️): ", Date.now());
 
       await session.answer();
+
+      console.log("triggerred answer(✅✅✅✅✅✅✅✅✅✅✅✅): ", Date.now());
 
       await session.startRinging();
 
       await new Promise((r) => setTimeout(r, 5000));
 
       console.log("stopping ringtone: ", Date.now());
+      await session.stopRinging();
 
       const rtpReady = await session.waitForRtpTarget(4000);
 

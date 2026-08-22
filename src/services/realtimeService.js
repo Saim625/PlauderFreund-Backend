@@ -46,10 +46,6 @@ export async function connectToRealtimeAPI(
       },
     });
   }
-  console.log(
-    "Personality config for realtime connection:",
-    personalityConfig.realtimeModel,
-  );
 
   const realtimeModel = personalityConfig?.realtimeModel || "gpt-realtime-mini";
   const realtimeWsUrl = `${OPENAI_REALTIME_API.replace(/\/$/, "")}?model=${encodeURIComponent(realtimeModel)}`;
