@@ -55,8 +55,14 @@ class CallManager {
 
       this.activeSessions.set(channelId, session);
 
+      console.log("Starting ringing: ", Date.now());
       await session.startRinging();
+
+      console.log("Starting prepare: ", Date.now());
+
       await session.prepare();
+
+      console.log("prepare end: ", Date.now());
 
       const mockSocket = new TelephonySocketAdapter(
         channelId,
@@ -73,7 +79,11 @@ class CallManager {
         deferConversationStart: true,
       });
 
+      console.log("stopping ringtone: ", Date.now());
+
       await session.stopRinging();
+
+      console.log("triggering answer(): ", Date.now());
 
       await session.answer();
 
@@ -88,6 +98,8 @@ class CallManager {
       setReengagementBlocked(sessionId, true);
 
       markAiSpeaking(sessionId);
+
+      console.log("Starting greeting ", Date.now());
 
       await session.playGreeting();
 
