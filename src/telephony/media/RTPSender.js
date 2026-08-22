@@ -3,15 +3,24 @@ import { RTPUtils } from "../utils/codecs.js";
 import { createMediaStats } from "../utils/telephonyDebug.js";
 import { encode24kPcmToMulaw } from "../utils/AudioResampler.js";
 import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const ULAW_PAYLOAD_TYPE = 0;
 const FRAME_SIZE = 160; // 20ms @ 8kHz µ-law (1 byte/sample)
 const FRAME_MS = 20;
 const ULAW_SILENCE = 0xff;
 
-const DISCLAIMER_AUDIO = fs.readFileSync(
+// Resolves cleanly from src/telephony/media -> src/assets/audio
+const DISCLAIMER_PATH = path.resolve(
+  __dirname,
   "../../assets/audio/plauderfreund-disclaimer.ulaw",
 );
+
+const DISCLAIMER_AUDIO = fs.readFileSync(DISCLAIMER_PATH);
 
 export class RTPSender {
   constructor(
