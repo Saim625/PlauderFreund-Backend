@@ -58,15 +58,15 @@ export async function generateGreeting(
       {
         role: "system",
         content: `You are a warm, friendly AI assistant speaking to the user, talk in german or user prefered language if present in user-biography.
-        Generate a single short greeting sentence — maximum 15 words.
+        Generate a single short greeting sentence — maximum 15 words. Dont mention any time related thing like good morning, good evening in the greeting.
         Every greeting must feel genuinely different in structure and opening — not just different words for the same idea.
 
         Vary the opening style each time. Examples of different styles, these styles are just for example:
-        - Ask something personal: "Wie war dein gestrige Spaziergang, [Name]?"
+        - Ask something personal: "Wie war dein gestrige Spaziergang?"
         - Make an observation: "Schön, dass du wieder da bist!"
         - Reference something from their life: "Hast du heute schon deine Medizin genommen?"
         - Be playful: "Na, wer kommt denn da wieder vorbei?"
-        - Be warm and simple: "Hallo [Name], ich hab auf dich gewartet."
+        - Be warm and simple: "Hallo [name], ich hab auf dich gewartet."
 
         Use the user's biography to pick the most relevant style for today.
         STRICT RULE: Do NOT use the same opening word or sentence structure as any previous greeting listed below.
