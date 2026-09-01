@@ -137,6 +137,8 @@ model Reminder {
 
   // Content
   title                     String
+  // Stable, normalized identity used to prevent AI wording variants creating duplicates.
+  identityKey               String?               @map("identity_key")
   description               String?
   reminderType              String?               @map("reminder_type") @db.VarChar(50)
   
@@ -156,6 +158,7 @@ model Reminder {
   updatedAt                 DateTime              @updatedAt @map("updated_at") @db.Timestamptz
 
   @@map("reminders")
+  @@unique([userToken, identityKey])
 }
 
 model ReminderDeliveryLog {

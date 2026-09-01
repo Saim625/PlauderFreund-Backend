@@ -4,12 +4,33 @@ import { getGPTResponse } from "./gptService.js";
 import { parseAndSaveReminders } from "./reminderService.js"; // no longer calls GPT
 import { addChatTokens } from "./usageTracker.js";
 
+// A Conversation is shared by all sessions of one user. Serializing flushes
+// prevents two near-simultaneous disconnects from extracting the same messages.
+const flushLocks = new Map();
+
+async function acquireFlushLock(token) {
+  const previous = flushLocks.get(token) || Promise.resolve();
+  let release;
+  const current = new Promise((resolve) => {
+    release = resolve;
+  });
+  const queued = previous.then(() => current);
+  flushLocks.set(token, queued);
+  await previous;
+
+  return () => {
+    release();
+    if (flushLocks.get(token) === queued) flushLocks.delete(token);
+  };
+}
+
 export async function flushConversationToMemory(
   token,
   timezone,
   sessionId,
   chatModel = "gpt-4o-mini",
 ) {
+  const releaseFlushLock = await acquireFlushLock(token);
   try {
     console.log("🧠 Flushing conversation to memory:", token);
     const convo = await prisma.conversation.findUnique({
@@ -23,16 +44,36 @@ export async function flushConversationToMemory(
     const unprocessed = convo.messages.filter((m) => !m.processed);
     if (!unprocessed.length) return;
 
-    // 2️⃣ Build conversation text
-    const conversationText = unprocessed
-      .map((m) =>
-        m.role === "user" ? `USER: ${m.text}` : `ASSISTANT: ${m.text}`,
-      )
+    // Reminder and fact extraction must never see assistant messages. Reminder
+    // deliveries are spoken by the assistant and would otherwise re-enter the
+    // database when the session is flushed.
+    const userConversationText = unprocessed
+      .filter((m) => m.role === "user")
+      .map((m) => `USER: ${m.text}`)
       .join("\n");
+
+    if (!userConversationText.trim()) {
+      await prisma.message.deleteMany({
+        where: { id: { in: unprocessed.map((m) => m.id) } },
+      });
+      return;
+    }
 
     const existingFacts = await prisma.memorySummary.findUnique({
       where: { token },
       include: { summary: true },
+    });
+    const activeReminders = await prisma.reminder.findMany({
+      where: { userToken: token, status: "active" },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        reminderType: true,
+        eventDatetime: true,
+        recurrence: true,
+      },
+      orderBy: { id: "asc" },
     });
 
     const safeTimezone =
@@ -45,9 +86,10 @@ You are a memory and reminder extraction system for a voice assistant.
 
 You are given:
 1) The user's EXISTING memory (facts already known)
-2) A NEW conversation
+2) The user's active reminders
+3) NEW user messages only (assistant messages are intentionally excluded)
 
-Your job is to return a JSON object with exactly two keys: "facts" and "reminders".
+Your job is to return a JSON object with exactly three keys: "facts", "reminders", and "session_summary".
 
 ---
 
@@ -105,12 +147,15 @@ All datetime fields must be ISO 8601 with correct offset for "${safeTimezone}".
 You MUST calculate datetimes — never leave them null when there is any time information available.
 
 ### CRITICAL — DO NOT EXTRACT FROM ASSISTANT MESSAGES:
-- ASSISTANT messages may contain reminder information that was fetched from the database and delivered to the user
-- This information already exists in the system — extracting it again will cause duplicate or corrupted reminders
-- ONLY extract reminders from USER messages
-- If the same reminder appears in both USER and ASSISTANT messages, only use the USER version
-- If a reminder ONLY appears in ASSISTANT messages — skip it entirely, do NOT extract it
-- Dont update existing reminders until explicitly told to do so by the user.
+- The input contains USER messages only. Never create a reminder from an
+  acknowledgement, confirmation, or vague follow-up such as "yes", "okay",
+  "I know", or "I took it".
+- Compare every explicit reminder request with ACTIVE REMINDERS below.
+- If it is the same reminder with a wording variation (for example "headache
+  medicine" and "headache medicine daily"), return the matching id in
+  existing_reminder_id and set action to "none"; do not create another reminder.
+- Only update an existing reminder when the user explicitly asks to change it.
+- Do not infer a new reminder from an existing reminder or from a prior session.
 
 ### How to calculate event_datetime:
 
@@ -161,6 +206,8 @@ Double-check your calculation before outputting event_datetime.
 
 ### Output format — ALL fields required for medication and appointment:
 - "title": short clear title, include weekday for weekly recurring (e.g. "Hockey Match Monday")
+- "existing_reminder_id": matching active reminder id, or null for a truly new reminder
+- "action": "create" for a new reminder, "update" only for an explicit change, or "none" for an already-existing reminder
 - "description": extra context or null
 - "reminder_type": "medication" | "appointment" | "birthday" | "general"
 - "event_datetime": ISO8601 — REQUIRED for medication/appointment, null only if truly impossible
@@ -186,8 +233,11 @@ Return ONLY this JSON. No explanation, no markdown:
 ### EXISTING MEMORY:
 """${JSON.stringify(existingFacts?.summary || [])}"""
 
-### NEW CONVERSATION:
-"""${conversationText}"""
+### ACTIVE REMINDERS:
+"""${JSON.stringify(activeReminders)}"""
+
+### NEW USER MESSAGES:
+"""${userConversationText}"""
 `;
 
     // 4️⃣ Single GPT call
@@ -263,5 +313,7 @@ Return ONLY this JSON. No explanation, no markdown:
     }
   } catch (err) {
     console.log("Error in FlushConversationToMemory: ", err.message);
+  } finally {
+    releaseFlushLock();
   }
 }

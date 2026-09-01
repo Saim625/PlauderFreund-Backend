@@ -174,7 +174,9 @@ export function startReminderCleanup() {
         recurrence: "none",
         remindUntil: { lt: now },
       },
-      data: { status: "expired" },
+      // Free the active-reminder identity so a user can intentionally create
+      // the same one-time reminder again in the future.
+      data: { status: "expired", identityKey: null },
     });
     logger.info(`🧹 Expired ${expireResult.count} one-time reminder(s)`);
 
@@ -197,6 +199,7 @@ export function startReminderCleanup() {
             eventDatetime: next.newEventDatetime,
             remindFrom: next.newRemindFrom,
             remindUntil: next.newRemindUntil,
+            acknowledgedAt: null,
             updatedAt: new Date(),
           },
         });

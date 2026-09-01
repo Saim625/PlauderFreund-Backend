@@ -179,6 +179,71 @@ async function handleGetUserReminders(args, callId, token, gptWs, timezone) {
   }
 }
 
+async function handleAcknowledgeReminder(
+  args,
+  callId,
+  sessionId,
+  token,
+  gptWs,
+) {
+  const reminderId = Number(args.reminder_id);
+  if (!Number.isInteger(reminderId) || reminderId <= 0) {
+    await sendToolResult(gptWs, callId, sessionId, token, false, {
+      message: "A valid reminder id is required.",
+    });
+    return;
+  }
+
+  try {
+    const reminder = await prisma.reminder.findFirst({
+      where: { id: reminderId, userToken: token, status: "active" },
+    });
+
+    if (!reminder) {
+      await sendToolResult(gptWs, callId, sessionId, token, false, {
+        message: "Reminder was not found or is no longer active.",
+      });
+      return;
+    }
+
+    const now = new Date();
+    await prisma.$transaction([
+      prisma.reminder.update({
+        where: { id: reminder.id },
+        data: {
+          // A recurring reminder remains available for its next occurrence.
+          // A one-time reminder is completed so it is never delivered again.
+          status: reminder.recurrence === "none" ? "completed" : "active",
+          identityKey: reminder.recurrence === "none" ? null : undefined,
+          acknowledgedAt: now,
+        },
+      }),
+      prisma.reminderDeliveryLog.updateMany({
+        where: {
+          reminderId: reminder.id,
+          userToken: token,
+          sessionId,
+          deliveryStatus: "delivered",
+        },
+        data: { deliveryStatus: "acknowledged", acknowledgedAt: now },
+      }),
+    ]);
+
+    logger.info(`✅ Acknowledged reminder ${reminder.id} for token ${token}`);
+    await sendToolResult(gptWs, callId, sessionId, token, true, {
+      message:
+        reminder.recurrence === "none"
+          ? "Reminder completed."
+          : "Reminder acknowledged for this occurrence.",
+    });
+  } catch (err) {
+    logger.error("❌ Error acknowledging reminder:", err);
+    await sendToolResult(gptWs, callId, sessionId, token, false, {
+      message: "Failed to acknowledge the reminder.",
+    });
+  }
+}
+
 async function handleUpdatePersonalityPreference(
   args,
   callId,
@@ -298,6 +363,16 @@ export async function handleToolCall(
   switch (name) {
     case "get_user_reminders":
       await handleGetUserReminders(args, call_id, token, gptWs, timezone);
+      break;
+
+    case "acknowledge_reminder":
+      await handleAcknowledgeReminder(
+        args,
+        call_id,
+        sessionId,
+        token,
+        gptWs,
+      );
       break;
 
     case "web_search":

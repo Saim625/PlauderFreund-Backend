@@ -1,5 +1,37 @@
 import prisma from "../lib/db.js";
 
+const TITLE_NOISE_WORDS = new Set([
+  "daily",
+  "everyday",
+  "every",
+  "each",
+  "täglich",
+  "taeglich",
+  "jeden",
+  "jedes",
+  "jede",
+  "tag",
+]);
+
+/**
+ * Creates a stable identifier from the reminder's meaning, not its display
+ * wording. In particular, generated suffixes such as "daily" do not turn a
+ * reminder into a separate database record.
+ */
+export function buildReminderIdentityKey(title, reminderType = "general") {
+  const normalizedTitle = String(title || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter((word) => word && !TITLE_NOISE_WORDS.has(word))
+    .join(" ");
+
+  return `${reminderType || "general"}:${normalizedTitle}`;
+}
+
 // ---------------------------------------------------------------------------
 // 1. Validate & normalize a single raw reminder from GPT output
 // ---------------------------------------------------------------------------
@@ -30,6 +62,12 @@ function normalizeReminder(raw) {
     recurrence: validRecurrences.includes(raw.recurrence)
       ? raw.recurrence
       : "none",
+    existingReminderId: Number.isInteger(raw.existing_reminder_id)
+      ? raw.existing_reminder_id
+      : null,
+    action: ["create", "update", "none"].includes(raw.action)
+      ? raw.action
+      : "create",
   };
 
   // For medication and appointment — reject if event_datetime is missing
@@ -95,16 +133,58 @@ function normalizeReminder(raw) {
 // ---------------------------------------------------------------------------
 
 async function upsertReminder(userToken, reminder) {
-  const existing = await prisma.reminder.findFirst({
-    where: {
-      userToken,
-      title: reminder.title,
-      reminderType: reminder.reminderType,
-      status: "active",
-    },
-  });
+  const identityKey = buildReminderIdentityKey(
+    reminder.title,
+    reminder.reminderType,
+  );
+
+  // An explicit existing id, supplied only when the user clearly changed a
+  // listed reminder, takes precedence over title matching.
+  let existing = reminder.existingReminderId
+    ? await prisma.reminder.findFirst({
+        where: {
+          id: reminder.existingReminderId,
+          userToken,
+          status: "active",
+        },
+      })
+    : null;
+
+  if (!existing) {
+    existing = await prisma.reminder.findFirst({
+      where: { userToken, identityKey, status: "active" },
+    });
+  }
+
+  // Supports reminders created before identityKey was introduced. Once one is
+  // touched, it is migrated naturally by the update below.
+  if (!existing) {
+    const legacyCandidates = await prisma.reminder.findMany({
+      where: { userToken, reminderType: reminder.reminderType, status: "active" },
+    });
+    existing = legacyCandidates.find(
+      (candidate) =>
+        buildReminderIdentityKey(candidate.title, candidate.reminderType) ===
+        identityKey,
+    );
+  }
+
+  // "none" is the extractor's explicit signal that this was only a repeat or
+  // acknowledgement. It must never create a record, even if GPT supplied an
+  // incorrect or stale existing id.
+  if (!existing && reminder.action === "none") {
+    console.log(`⏭️ Non-new reminder skipped: "${reminder.title}"`);
+    return "skipped";
+  }
 
   if (existing) {
+    // Repeating an already-known reminder is not an instruction to move its
+    // schedule. Only an explicit user-requested change may update it.
+    if (reminder.action !== "update") {
+      console.log(`⏭️ Duplicate reminder skipped: "${reminder.title}"`);
+      return "skipped";
+    }
+
     // Only overwrite fields where new value is non-null
     await prisma.reminder.update({
       where: { id: existing.id },
@@ -114,21 +194,47 @@ async function upsertReminder(userToken, reminder) {
         remindFrom: reminder.remindFrom ?? existing.remindFrom,
         remindUntil: reminder.remindUntil ?? existing.remindUntil,
         recurrence: reminder.recurrence ?? existing.recurrence,
+        identityKey,
         updatedAt: new Date(),
       },
     });
     console.log(`🔄 Updated existing reminder: "${reminder.title}"`);
     return "updated";
   } else {
-    await prisma.reminder.create({
-      data: {
-        userToken,
-        ...reminder,
-        status: "active",
-      },
-    });
-    console.log(`✅ Created new reminder: "${reminder.title}"`);
-    return "created";
+    try {
+      await prisma.reminder.create({
+        data: {
+          userToken,
+          title: reminder.title,
+          description: reminder.description,
+          reminderType: reminder.reminderType,
+          eventDatetime: reminder.eventDatetime,
+          remindFrom: reminder.remindFrom,
+          remindUntil: reminder.remindUntil,
+          recurrence: reminder.recurrence,
+          identityKey,
+          status: "active",
+        },
+      });
+      console.log(`✅ Created new reminder: "${reminder.title}"`);
+      return "created";
+    } catch (err) {
+      // The unique key also protects against two concurrent conversation
+      // flushes attempting to create the same reminder.
+      if (err.code !== "P2002") throw err;
+
+      const concurrentExisting = await prisma.reminder.findFirst({
+        where: { userToken, identityKey, status: "active" },
+      });
+      if (!concurrentExisting) throw err;
+
+      await prisma.reminder.update({
+        where: { id: concurrentExisting.id },
+        data: { updatedAt: new Date() },
+      });
+      console.log(`🔄 Reused concurrently-created reminder: "${reminder.title}"`);
+      return "updated";
+    }
   }
 }
 
@@ -161,6 +267,7 @@ export async function parseAndSaveReminders(userToken, rawReminders) {
     const result = await upsertReminder(userToken, reminder);
     if (result === "created") created++;
     else if (result === "updated") updated++;
+    else if (result === "skipped") skipped++;
   }
 
   console.log(

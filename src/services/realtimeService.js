@@ -120,6 +120,40 @@ Examples:
 Keep the acknowledgement to one short sentence and speak in german or user preferred language.
 After the search completes, use the search results to answer the user's question naturally.
 
+### NUMBER, DATE, TIME, AND YEAR PRONUNCIATION
+
+When speaking, always pronounce dates, times, years, and numbers naturally, as a native speaker would. Never read digits individually unless the user explicitly asks you to.
+
+#### Time
+Speak time conversationally.
+Examples:
+- 3:30 → "half past three"
+- 3:15 → "quarter past three"
+- 3:45 → "quarter to four"
+- 3:00 → "three o'clock"
+- 3:05 → "five past three"
+
+#### Dates
+Speak dates naturally.
+Example:
+- 2026-08-27 → "August twenty-seventh, twenty twenty-six"
+
+#### Years
+Pronounce years naturally.
+Examples:
+- 2026 → "twenty twenty-six"
+- 2025 → "twenty twenty-five"
+- 1998 → "nineteen ninety-eight"
+
+#### Numbers
+Read numbers as complete numbers, not digit by digit, unless the user specifically requests otherwise.
+Examples:
+- 400330 → "four hundred thousand three hundred thirty"
+- 1250 → "one thousand two hundred fifty"
+- 42 → "forty-two"
+
+Avoid spelling out individual digits such as "four zero zero three three zero" unless explicitly requested.
+
 ### TIME CONTEXT
 - Current UTC Time: ${now.toISOString()}
 - User Timezone: ${timezone}
@@ -179,6 +213,40 @@ Examples:
 
 Keep the acknowledgement to one short sentence and speak in german or user preferred language.
 After the search completes, use the search results to answer the user's question naturally.
+
+### NUMBER, DATE, TIME, AND YEAR PRONUNCIATION
+
+When speaking, always pronounce dates, times, years, and numbers naturally, as a native speaker would. Never read digits individually unless the user explicitly asks you to.
+
+#### Time
+Speak time conversationally.
+Examples:
+- 3:30 → "half past three"
+- 3:15 → "quarter past three"
+- 3:45 → "quarter to four"
+- 3:00 → "three o'clock"
+- 3:05 → "five past three"
+
+#### Dates
+Speak dates naturally.
+Example:
+- 2026-08-27 → "August twenty-seventh, twenty twenty-six"
+
+#### Years
+Pronounce years naturally.
+Examples:
+- 2026 → "twenty twenty-six"
+- 2025 → "twenty twenty-five"
+- 1998 → "nineteen ninety-eight"
+
+#### Numbers
+Read numbers as complete numbers, not digit by digit, unless the user specifically requests otherwise.
+Examples:
+- 400330 → "four hundred thousand three hundred thirty"
+- 1250 → "one thousand two hundred fifty"
+- 42 → "forty-two"
+
+Avoid spelling out individual digits such as "four zero zero three three zero" unless explicitly requested.
 `.trim()
       : "";
 
@@ -291,6 +359,23 @@ ${personalityInstructions}
                     },
                   },
                   required: ["filter"],
+                },
+              },
+              {
+                type: "function",
+                name: "acknowledge_reminder",
+                description:
+                  "Call this only after a reminder was just delivered and the user clearly says they completed it, took it, or wants to dismiss it. Never guess an id; use the REMINDER ID supplied in the delivered reminder context.",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    reminder_id: {
+                      type: "integer",
+                      description:
+                        "The id of the delivered reminder the user acknowledged.",
+                    },
+                  },
+                  required: ["reminder_id"],
                 },
               },
               {
