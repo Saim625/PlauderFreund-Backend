@@ -107,6 +107,7 @@ export class RTPSender {
   }
 
   sendDisclaimer() {
+    this.sendSilence(250);
     this.sendAudio(DISCLAIMER_AUDIO);
     this.flush();
   }
