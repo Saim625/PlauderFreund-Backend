@@ -10,6 +10,7 @@ import {
   markAiSpeaking,
   setReengagementBlocked,
 } from "../../services/reengagementEngine.js";
+import prisma from "../../lib/db.js";
 
 class CallManager {
   constructor() {
@@ -48,7 +49,11 @@ class CallManager {
 
       if (BYPASS_PHONE_CHECK) {
         console.log("🧪 Phone lookup bypass enabled");
-        user = await UserLookup.byToken(TEST_TOKEN);
+        user = await prisma.userAccessToken.findUnique({
+          where: {
+            token: TEST_TOKEN,
+          },
+        });
       } else {
         user = await UserLookup.byPhoneNumber(callerID);
 
