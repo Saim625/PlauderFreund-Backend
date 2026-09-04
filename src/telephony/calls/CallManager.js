@@ -18,8 +18,8 @@ class CallManager {
   }
 
   async handleIncomingCall(event) {
-    // const BYPASS_PHONE_CHECK = true;
-    // const TEST_TOKEN = "f106ae2";
+    const BYPASS_PHONE_CHECK = true;
+    const TEST_TOKEN = "f106ae2";
 
     const channel = event.channel;
     const channelId = channel.id;
@@ -38,36 +38,36 @@ class CallManager {
 
     try {
       // 1. User Profile Lookup
-      const user = await UserLookup.byPhoneNumber(callerID);
+      // const user = await UserLookup.byPhoneNumber(callerID);
 
-      if (!user) {
-        console.warn(`❌ [CallManager] Unregistered phone number: ${callerID}`);
-        return;
-      }
-
-      // let user;
-
-      // if (BYPASS_PHONE_CHECK) {
-      //   console.log("🧪 Phone lookup bypass enabled");
-      //   user = await prisma.userAccessToken.findUnique({
-      //     where: {
-      //       token: TEST_TOKEN,
-      //     },
-      //   });
-      // } else {
-      //   user = await UserLookup.byPhoneNumber(callerID);
-
-      //   if (!user) {
-      //     console.warn(
-      //       `❌ [CallManager] Unregistered phone number: ${callerID}`,
-      //     );
-      //     return;
-      //   }
+      // if (!user) {
+      //   console.warn(`❌ [CallManager] Unregistered phone number: ${callerID}`);
+      //   return;
       // }
 
-      // console.log(
-      //   `✅ [CallManager] Authenticated User Token: ${user.token.substring(0, 8)}...`,
-      // );
+      let user;
+
+      if (BYPASS_PHONE_CHECK) {
+        console.log("🧪 Phone lookup bypass enabled");
+        user = await prisma.userAccessToken.findUnique({
+          where: {
+            token: TEST_TOKEN,
+          },
+        });
+      } else {
+        user = await UserLookup.byPhoneNumber(callerID);
+
+        if (!user) {
+          console.warn(
+            `❌ [CallManager] Unregistered phone number: ${callerID}`,
+          );
+          return;
+        }
+      }
+
+      console.log(
+        `✅ [CallManager] Authenticated User Token: ${user.token.substring(0, 8)}...`,
+      );
 
       const greeting = await generateGreeting(user.token, {
         outputFormat: "ulaw_8000",
