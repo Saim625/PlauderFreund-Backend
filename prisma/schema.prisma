@@ -12,6 +12,7 @@ model UserAccessToken {
   id        Int      @id @default(autoincrement())
   token     String   @unique
   number    String?  @unique
+  name      String?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   lastActiveAt DateTime? @map("last_active_at") @db.Timestamptz

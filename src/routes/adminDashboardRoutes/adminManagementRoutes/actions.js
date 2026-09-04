@@ -228,7 +228,7 @@ adminActionRouter.put(
   },
 );
 
-// Assign number to user token (MAIN_ADMIN only)
+// Assign a name and number to a user token (MAIN_ADMIN only)
 adminActionRouter.post(
   "/token/:id/assign-number",
   verifyAdminToken(), // Must be admin
@@ -250,10 +250,18 @@ adminActionRouter.post(
         });
       }
 
-      const { number } = req.body;
+      const { name, number } = req.body;
+
+      const nameStr = typeof name === "string" ? name.trim() : "";
+      if (!nameStr || nameStr.length > 100) {
+        return res.status(400).json({
+          success: false,
+          message: "Name is required and must be 100 characters or fewer",
+        });
+      }
 
       // Validation: Check if number is 11 or 12 digits
-      const numberStr = String(number).trim();
+      const numberStr = typeof number === "string" ? number.trim() : "";
       if (!/^\+?[^<>]{0,19}$/.test(numberStr)) {
         return res.status(400).json({
           success: false,
@@ -289,18 +297,19 @@ adminActionRouter.post(
         });
       }
 
-      // Assign the number
+      // Assign the name and number
       const updated = await prisma.userAccessToken.update({
         where: { id: userTokenId },
-        data: { number: numberStr },
+        data: { name: nameStr, number: numberStr },
       });
 
       return res.json({
         success: true,
-        message: "Number assigned successfully",
+        message: "Name and number assigned successfully",
         data: {
           id: updated.id,
           token: updated.token,
+          name: updated.name,
           number: updated.number,
         },
       });
@@ -324,7 +333,7 @@ adminActionRouter.post(
   },
 );
 
-// Update assigned number (MAIN_ADMIN only)
+// Update an assigned name and number (MAIN_ADMIN only)
 adminActionRouter.put(
   "/token/:id/update-number",
   verifyAdminToken(), // Must be admin
@@ -346,10 +355,18 @@ adminActionRouter.put(
         });
       }
 
-      const { number } = req.body;
+      const { name, number } = req.body;
+
+      const nameStr = typeof name === "string" ? name.trim() : "";
+      if (!nameStr || nameStr.length > 100) {
+        return res.status(400).json({
+          success: false,
+          message: "Name is required and must be 100 characters or fewer",
+        });
+      }
 
       // Validation: Check if number is 11 or 12 digits
-      const numberStr = String(number).trim();
+      const numberStr = typeof number === "string" ? number.trim() : "";
       if (!/^\+?[^<>]{0,19}$/.test(numberStr)) {
         return res.status(400).json({
           success: false,
@@ -385,18 +402,19 @@ adminActionRouter.put(
         });
       }
 
-      // Update the number
+      // Update the name and number
       const updated = await prisma.userAccessToken.update({
         where: { id: userTokenId },
-        data: { number: numberStr },
+        data: { name: nameStr, number: numberStr },
       });
 
       return res.json({
         success: true,
-        message: "Number updated successfully",
+        message: "Name and number updated successfully",
         data: {
           id: updated.id,
           token: updated.token,
+          name: updated.name,
           number: updated.number,
         },
       });
