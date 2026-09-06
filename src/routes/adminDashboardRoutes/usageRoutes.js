@@ -53,7 +53,13 @@ usageRouter.get("/usage/summary", verifyAdminToken(), async (req, res) => {
   try {
     const summaries = await prisma.userUsageSummary.findMany({
       include: {
-        user: { select: { token: true, number: true, isActive: true } },
+        user: {
+          select: {
+            token: true,
+            phoneNumbers: { select: { number: true }, orderBy: { id: "asc" } },
+            isActive: true,
+          },
+        },
       },
       orderBy: { totalCost: "desc" },
     });
@@ -164,7 +170,13 @@ usageRouter.get(
   async (req, res) => {
     try {
       const summaries = await prisma.userUsageSummary.findMany({
-        include: { user: { select: { number: true } } },
+        include: {
+          user: {
+            select: {
+              phoneNumbers: { select: { number: true }, orderBy: { id: "asc" } },
+            },
+          },
+        },
         orderBy: { totalCost: "desc" },
       });
 
@@ -190,7 +202,7 @@ usageRouter.get(
         .map((s) =>
           [
             s.userToken,
-            s.user?.number || "",
+            s.user?.phoneNumbers.map(({ number }) => number).join(" | ") || "",
             s.totalSessions,
             s.totalDurationSeconds,
             s.totalRealtimeTextInputTokens,

@@ -14,11 +14,14 @@ export class UserLookup {
 
     try {
       // 2. Fetch User and eager-load all relevant history
-      const user = await prisma.userAccessToken.findUnique({
+      const phoneNumber = await prisma.userPhoneNumber.findUnique({
         where: {
           number: normalizedNumber,
         },
+        include: { user: true },
       });
+
+      const user = phoneNumber?.user;
 
       if (!user) {
         console.warn(

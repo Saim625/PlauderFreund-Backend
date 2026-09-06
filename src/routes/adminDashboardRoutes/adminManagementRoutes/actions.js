@@ -5,6 +5,64 @@ import { verifyAdminToken } from "../../../middleware/verifyAdminToken.js";
 
 export const adminActionRouter = express.Router();
 
+function validateNameAndNumbers(body) {
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  if (!name || name.length > 100) {
+    return { error: "Name is required and must be 100 characters or fewer" };
+  }
+
+  const requestedNumbers = Array.isArray(body.numbers)
+    ? body.numbers
+    : body.number !== undefined
+      ? [body.number]
+      : [];
+
+  if (!requestedNumbers.length) {
+    return { error: "At least one phone number is required" };
+  }
+
+  const numbers = requestedNumbers.map((number) =>
+    typeof number === "string" ? number.trim() : "",
+  );
+
+  if (numbers.some((number) => !/^\+?\d{1,19}$/.test(number))) {
+    return {
+      error: "Each number must contain 1 to 19 digits (optional + prefix allowed)",
+    };
+  }
+
+  if (new Set(numbers).size !== numbers.length) {
+    return { error: "Each phone number may only be entered once" };
+  }
+
+  return { name, numbers };
+}
+
+async function saveUserPhoneNumbers(userTokenId, name, numbers) {
+  return prisma.$transaction(async (tx) => {
+    await tx.userAccessToken.update({
+      where: { id: userTokenId },
+      data: { name },
+    });
+
+    await tx.userPhoneNumber.deleteMany({
+      where: { userAccessTokenId: userTokenId },
+    });
+
+    await tx.userPhoneNumber.createMany({
+      data: numbers.map((number) => ({
+        number,
+        userAccessTokenId: userTokenId,
+      })),
+    });
+
+    return tx.userAccessToken.findUnique({
+      where: { id: userTokenId },
+      include: { phoneNumbers: { orderBy: { id: "asc" } } },
+    });
+  });
+}
+
 /**
  * Get all admins
  * Only accessible by MAIN_ADMIN (we enforce below)
@@ -228,7 +286,7 @@ adminActionRouter.put(
   },
 );
 
-// Assign a name and number to a user token (MAIN_ADMIN only)
+// Assign a name and phone numbers to a user token (MAIN_ADMIN only)
 adminActionRouter.post(
   "/token/:id/assign-number",
   verifyAdminToken(), // Must be admin
@@ -250,24 +308,9 @@ adminActionRouter.post(
         });
       }
 
-      const { name, number } = req.body;
-
-      const nameStr = typeof name === "string" ? name.trim() : "";
-      if (!nameStr || nameStr.length > 100) {
-        return res.status(400).json({
-          success: false,
-          message: "Name is required and must be 100 characters or fewer",
-        });
-      }
-
-      // Validation: Check if number is 11 or 12 digits
-      const numberStr = typeof number === "string" ? number.trim() : "";
-      if (!/^\+?[^<>]{0,19}$/.test(numberStr)) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Number must be between 10 to 20 digits (optional + prefix allowed)",
-        });
+      const validated = validateNameAndNumbers(req.body);
+      if (validated.error) {
+        return res.status(400).json({ success: false, message: validated.error });
       }
 
       // Check if token exists
@@ -282,45 +325,45 @@ adminActionRouter.post(
         });
       }
 
-      // Check if number is already assigned to another token
-      const existingNumber = await prisma.userAccessToken.findFirst({
+      // A phone number can only belong to one user token.
+      const existingNumber = await prisma.userPhoneNumber.findFirst({
         where: {
-          number: numberStr,
-          id: { not: userTokenId }, // Exclude current token
+          number: { in: validated.numbers },
+          userAccessTokenId: { not: userTokenId },
         },
       });
 
       if (existingNumber) {
         return res.status(400).json({
           success: false,
-          message: "This number is already assigned to another token",
+          message: "One or more phone numbers are already assigned to another token",
         });
       }
 
-      // Assign the name and number
-      const updated = await prisma.userAccessToken.update({
-        where: { id: userTokenId },
-        data: { name: nameStr, number: numberStr },
-      });
+      const updated = await saveUserPhoneNumbers(
+        userTokenId,
+        validated.name,
+        validated.numbers,
+      );
 
       return res.json({
         success: true,
-        message: "Name and number assigned successfully",
+        message: "Name and phone numbers assigned successfully",
         data: {
           id: updated.id,
           token: updated.token,
           name: updated.name,
-          number: updated.number,
+          phoneNumbers: updated.phoneNumbers,
         },
       });
     } catch (err) {
-      console.error("Assign number error:", err);
+      console.error("Assign phone numbers error:", err);
 
       // Handle unique constraint violation
       if (err.code === "P2002") {
         return res.status(400).json({
           success: false,
-          message: "This number is already assigned to another token",
+          message: "One or more phone numbers are already assigned to another token",
         });
       }
 
@@ -333,7 +376,7 @@ adminActionRouter.post(
   },
 );
 
-// Update an assigned name and number (MAIN_ADMIN only)
+// Update an assigned name and phone numbers (MAIN_ADMIN only)
 adminActionRouter.put(
   "/token/:id/update-number",
   verifyAdminToken(), // Must be admin
@@ -355,24 +398,9 @@ adminActionRouter.put(
         });
       }
 
-      const { name, number } = req.body;
-
-      const nameStr = typeof name === "string" ? name.trim() : "";
-      if (!nameStr || nameStr.length > 100) {
-        return res.status(400).json({
-          success: false,
-          message: "Name is required and must be 100 characters or fewer",
-        });
-      }
-
-      // Validation: Check if number is 11 or 12 digits
-      const numberStr = typeof number === "string" ? number.trim() : "";
-      if (!/^\+?[^<>]{0,19}$/.test(numberStr)) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Number must be between 10 to 20 digits (optional + prefix allowed)",
-        });
+      const validated = validateNameAndNumbers(req.body);
+      if (validated.error) {
+        return res.status(400).json({ success: false, message: validated.error });
       }
 
       // Check if token exists
@@ -387,45 +415,45 @@ adminActionRouter.put(
         });
       }
 
-      // Check if number is already assigned to another token
-      const existingNumber = await prisma.userAccessToken.findFirst({
+      // A phone number can only belong to one user token.
+      const existingNumber = await prisma.userPhoneNumber.findFirst({
         where: {
-          number: numberStr,
-          id: { not: userTokenId }, // Exclude current token
+          number: { in: validated.numbers },
+          userAccessTokenId: { not: userTokenId },
         },
       });
 
       if (existingNumber) {
         return res.status(400).json({
           success: false,
-          message: "This number is already assigned to another token",
+          message: "One or more phone numbers are already assigned to another token",
         });
       }
 
-      // Update the name and number
-      const updated = await prisma.userAccessToken.update({
-        where: { id: userTokenId },
-        data: { name: nameStr, number: numberStr },
-      });
+      const updated = await saveUserPhoneNumbers(
+        userTokenId,
+        validated.name,
+        validated.numbers,
+      );
 
       return res.json({
         success: true,
-        message: "Name and number updated successfully",
+        message: "Name and phone numbers updated successfully",
         data: {
           id: updated.id,
           token: updated.token,
           name: updated.name,
-          number: updated.number,
+          phoneNumbers: updated.phoneNumbers,
         },
       });
     } catch (err) {
-      console.error("Update number error:", err);
+      console.error("Update phone numbers error:", err);
 
       // Handle unique constraint violation
       if (err.code === "P2002") {
         return res.status(400).json({
           success: false,
-          message: "This number is already assigned to another token",
+          message: "One or more phone numbers are already assigned to another token",
         });
       }
 

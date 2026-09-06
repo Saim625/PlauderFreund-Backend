@@ -11,7 +11,11 @@ adminRouter.get(
   verifyAdminToken(["canManageUsers"]),
   async (req, res) => {
     try {
-      const fetchAllTokens = await prisma.userAccessToken.findMany();
+      const fetchAllTokens = await prisma.userAccessToken.findMany({
+        include: {
+          phoneNumbers: { orderBy: { id: "asc" } },
+        },
+      });
       res.status(200).json({ success: true, tokens: fetchAllTokens });
     } catch (err) {
       console.error("Error fetching tokens:", err);

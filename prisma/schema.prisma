@@ -11,7 +11,6 @@ datasource db {
 model UserAccessToken {
   id        Int      @id @default(autoincrement())
   token     String   @unique
-  number    String?  @unique
   name      String?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -21,7 +20,18 @@ model UserAccessToken {
   sessionLogs     SessionLog[]   
   usageSummary    UserUsageSummary? 
   conversationSummaries ConversationSummary[]
+  phoneNumbers    UserPhoneNumber[]
 
+}
+
+model UserPhoneNumber {
+  id                Int             @id @default(autoincrement())
+  number            String          @unique
+  userAccessTokenId Int             @map("user_access_token_id")
+  user              UserAccessToken @relation(fields: [userAccessTokenId], references: [id], onDelete: Cascade)
+  createdAt         DateTime        @default(now()) @map("created_at")
+
+  @@map("user_phone_numbers")
 }
 
 model AdminAccessToken {
