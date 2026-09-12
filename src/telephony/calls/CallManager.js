@@ -37,7 +37,7 @@ class CallManager {
     }
 
     try {
-      1. User Profile Lookup
+      // 1. User Profile Lookup
       const user = await UserLookup.byPhoneNumber(callerID);
 
       if (!user) {
