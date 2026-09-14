@@ -32,6 +32,7 @@ export class CallSession {
       this.rtpReceiver.on("audio", (audioPayload, rinfo) => {
         if (rinfo && !this._rtpTargetSet) {
           this.rtpSender.setTarget(rinfo.address, rinfo.port);
+          this.rtpSender.startSilence();
           this._rtpTargetSet = true;
         }
 

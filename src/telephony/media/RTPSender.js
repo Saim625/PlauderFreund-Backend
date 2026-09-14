@@ -37,7 +37,7 @@ export class RTPSender {
     this.ssrc = Math.floor(Math.random() * 100000);
     this.stats = createMediaStats(label);
     this._targetSet = false;
-
+    this.silenceInterval = null;
     this.frameQueue = [];
     this.pending = Buffer.alloc(0);
     this.pacingTimer = null;
@@ -57,6 +57,27 @@ export class RTPSender {
       this._preTargetBuffer = Buffer.alloc(0);
       this.sendAudio(buffered);
     }
+  }
+
+  startSilence() {
+    if (this.silenceInterval) return;
+
+    // Keep the RTP queue supplied with silence while the call is active.
+    this.silenceInterval = setInterval(() => {
+      if (!this._canSend()) return;
+
+      // Keep a small buffer of silence frames available.
+      if (this.frameQueue.length < 5) {
+        this.sendSilence(100);
+      }
+    }, 50);
+  }
+
+  stopSilence() {
+    if (!this.silenceInterval) return;
+
+    clearInterval(this.silenceInterval);
+    this.silenceInterval = null;
   }
 
   waitForTarget(timeoutMs = 3000) {
@@ -168,6 +189,7 @@ export class RTPSender {
   close() {
     this._stopPacing();
     this.stats.stop();
+    this.stopSilence();
     if (this.socket) {
       this.socket.close();
       this.socket = null;
