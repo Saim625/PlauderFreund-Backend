@@ -37,7 +37,7 @@ export class RTPSender {
     this.ssrc = Math.floor(Math.random() * 100000);
     this.stats = createMediaStats(label);
     this._targetSet = false;
-    this.silenceInterval = null;
+    this.silenceEnabled = false;
     this.frameQueue = [];
     this.pending = Buffer.alloc(0);
     this.pacingTimer = null;
@@ -60,24 +60,12 @@ export class RTPSender {
   }
 
   startSilence() {
-    if (this.silenceInterval) return;
-
-    // Keep the RTP queue supplied with silence while the call is active.
-    this.silenceInterval = setInterval(() => {
-      if (!this._canSend()) return;
-
-      // Keep a small buffer of silence frames available.
-      if (this.frameQueue.length < 5) {
-        this.sendSilence(100);
-      }
-    }, 50);
+    this.silenceEnabled = true;
+    this._ensurePacing();
   }
 
   stopSilence() {
-    if (!this.silenceInterval) return;
-
-    clearInterval(this.silenceInterval);
-    this.silenceInterval = null;
+    this.silenceEnabled = false;
   }
 
   waitForTarget(timeoutMs = 3000) {
@@ -243,12 +231,27 @@ export class RTPSender {
     }
 
     if (this.frameQueue.length === 0) {
-      this._stopPacing();
       this._fireIdleCallbacks();
-      return;
+
+      // A callback may have queued new real audio.
+      if (this.frameQueue.length > 0) {
+        // Continue below and send the newly queued audio.
+      } else if (this.silenceEnabled) {
+        this._sendRtpFrame(Buffer.alloc(FRAME_SIZE, ULAW_SILENCE));
+        return;
+      } else {
+        this._stopPacing();
+        return;
+      }
     }
 
-    const frame = this.frameQueue.shift();
+    if (this.frameQueue.length > 0) {
+      const frame = this.frameQueue.shift();
+      this._sendRtpFrame(frame);
+    }
+  }
+
+  _sendRtpFrame(frame) {
     const marker = this.markerNext;
     this.markerNext = false;
 
