@@ -106,7 +106,7 @@ actionRouter.delete(
         prisma.userUsageSummary.deleteMany({
           where: { userToken: userRecord.token },
         }),
-        prisma.conversationSummaries.deleteMany({
+        prisma.conversationSummary.deleteMany({
           where: { userToken: userRecord.token },
         }),
         prisma.userAccessToken.delete({ where: { id: tokenId } }),

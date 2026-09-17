@@ -1,7 +1,6 @@
 import dgram from "dgram";
 import { EventEmitter } from "events";
 import { RTPUtils } from "../utils/codecs.js";
-import { createMediaStats } from "../utils/telephonyDebug.js";
 
 export class RTPReceiver extends EventEmitter {
   constructor(port = 10000, label = "RTPReceiver") {
@@ -10,7 +9,6 @@ export class RTPReceiver extends EventEmitter {
     this.label = label;
     this.socket = null;
     this.isListening = false;
-    this.stats = createMediaStats(label);
   }
 
   start() {
@@ -24,7 +22,6 @@ export class RTPReceiver extends EventEmitter {
       const audioPayload = RTPUtils.parseRTPPayload(msg);
 
       if (audioPayload.length > 0) {
-        this.stats.record(audioPayload.length, rinfo);
         this.emit("audio", audioPayload, rinfo);
       }
     });
@@ -59,7 +56,6 @@ export class RTPReceiver extends EventEmitter {
 
   stop() {
     if (this.socket && this.isListening) {
-      this.stats.stop();
       this.socket.close();
       this.socket = null;
       this.isListening = false;

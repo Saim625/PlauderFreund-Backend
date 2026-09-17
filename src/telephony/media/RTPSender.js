@@ -1,6 +1,5 @@
 import dgram from "dgram";
 import { RTPUtils } from "../utils/codecs.js";
-import { createMediaStats } from "../utils/telephonyDebug.js";
 import { encode24kPcmToMulaw } from "../utils/AudioResampler.js";
 import fs from "fs";
 import path from "path";
@@ -35,7 +34,6 @@ export class RTPSender {
     this.sequenceNumber = 0;
     this.timestamp = Math.floor(Math.random() * 4294967296);
     this.ssrc = Math.floor(Math.random() * 100000);
-    this.stats = createMediaStats(label);
     this._targetSet = false;
     this.silenceEnabled = false;
     this.frameQueue = [];
@@ -176,7 +174,6 @@ export class RTPSender {
 
   close() {
     this._stopPacing();
-    this.stats.stop();
     this.stopSilence();
     if (this.socket) {
       this.socket.close();
@@ -265,8 +262,6 @@ export class RTPSender {
     );
 
     this.timestamp += FRAME_SIZE;
-
-    this.stats.recordOutbound(FRAME_SIZE, this.targetHost, this.targetPort);
 
     this.socket.send(
       packet,
