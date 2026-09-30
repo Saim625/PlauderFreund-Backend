@@ -343,6 +343,13 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
       ) {
         const userTranscript = event.transcript;
 
+        logger.info(
+          `📝 [${sessionId}] USER_TRANSCRIPTION ${JSON.stringify({
+            itemId: event.item_id ?? null,
+            transcript: userTranscript ?? null,
+          })}`,
+        );
+
         markUserAudio(sessionId);
 
         userMessageCount++;
