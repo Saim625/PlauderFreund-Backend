@@ -142,7 +142,6 @@ All datetime fields must be ISO 8601 with correct offset for "${safeTimezone}".
 ### CRITICAL RULES — READ CAREFULLY:
 
 **event_datetime is MANDATORY for all types of reminders.**
-**remind_from and remind_until are MANDATORY whenever event_datetime is known.**
 
 You MUST calculate datetimes — never leave them null when there is any time information available.
 
@@ -179,11 +178,8 @@ Use the first day of that month at 09:00 local time as a best estimate.
 **For recurring reminders — after calculating first occurrence:**
 Set recurrence field correctly. The system will automatically calculate future occurrences from there.
 
-### remind_from / remind_until — MANDATORY calculation:
-- medication  → remind_from: event_datetime MINUS 60 minutes, remind_until: event_datetime PLUS 720 minutes
-- appointment → remind_from: event_datetime MINUS 24 hours, remind_until: end of event day (23:59:59)
-- birthday    → remind_from: event_datetime MINUS 48 hours, remind_until: end of event day (23:59:59)
-- general     → remind_from: event_datetime MINUS 24 hours, remind_until: end of event day
+### Reminder windows
+The backend calculates remind_from and remind_until. Do not calculate or return them.
 
 ### Recurrence rules:
 - medication  → "daily" by default unless user says otherwise
@@ -204,15 +200,13 @@ To find NEXT occurrence of a weekday:
 
 Double-check your calculation before outputting event_datetime.
 
-### Output format — ALL fields required for medication and appointment:
+### Output format:
 - "title": short clear title, include weekday for weekly recurring (e.g. "Hockey Match Monday")
 - "existing_reminder_id": matching active reminder id, or null for a truly new reminder
 - "action": "create" for a new reminder, "update" only for an explicit change, or "none" for an already-existing reminder
 - "description": extra context or null
 - "reminder_type": "medication" | "appointment" | "birthday" | "general"
-- "event_datetime": ISO8601 — REQUIRED for medication/appointment, null only if truly impossible
-- "remind_from": ISO8601 — REQUIRED whenever event_datetime is set
-- "remind_until": ISO8601 — REQUIRED whenever event_datetime is set
+- "event_datetime": ISO8601 with offset — REQUIRED for every reminder; omit reminders with no determinable event time
 - "recurrence": "none" | "daily" | "weekly" | "yearly"
 
 If no reminders found, return empty array [].
@@ -298,19 +292,11 @@ Return ONLY this JSON. No explanation, no markdown:
       console.log(`✅ Session summary saved`);
     }
 
-    // 6️⃣ Delete processed messages
-    const unprocessedMessageIds = unprocessed.map((m) => m.id);
-
+    // Save first: a failed database write must leave source messages available.
+    await parseAndSaveReminders(token, reminders, safeTimezone);
     await prisma.message.deleteMany({
-      where: { id: { in: unprocessedMessageIds } },
+      where: { id: { in: unprocessed.map((m) => m.id) } },
     });
-
-    // 7️⃣ Save reminders (no GPT call — just parse + upsert)
-    try {
-      await parseAndSaveReminders(token, reminders);
-    } catch (err) {
-      console.error("❌ Reminder save failed (non-fatal):", err.message);
-    }
   } catch (err) {
     console.log("Error in FlushConversationToMemory: ", err.message);
   } finally {

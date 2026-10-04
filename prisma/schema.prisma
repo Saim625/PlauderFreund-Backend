@@ -158,6 +158,7 @@ model Reminder {
   remindFrom                DateTime?             @map("remind_from") @db.Timestamptz
   remindUntil               DateTime?             @map("remind_until") @db.Timestamptz
   recurrence                String                @default("none") @db.VarChar(50)
+  timezone                  String                @default("Europe/Berlin")
   
   // Status & Tracking
   status                    String                @default("active") @db.VarChar(30)
@@ -182,11 +183,13 @@ model ReminderDeliveryLog {
 
   // Delivery Details
   sessionId        String    @map("session_id")
+  occurrenceAt     DateTime? @map("occurrence_at") @db.Timestamptz
   deliveredAt      DateTime  @default(now()) @map("delivered_at") @db.Timestamptz
   deliveryStatus   String?   @map("delivery_status") @db.VarChar(30) // 'delivered', 'acknowledged'
   acknowledgedAt   DateTime? @map("acknowledged_at") @db.Timestamptz
 
   @@map("reminder_delivery_log")
+  @@unique([reminderId, occurrenceAt])
 }
 
 model GreetingHistory {

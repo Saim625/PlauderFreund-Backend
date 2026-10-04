@@ -195,46 +195,31 @@ async function handleAcknowledgeReminder(
   }
 
   try {
-    const reminder = await prisma.reminder.findFirst({
-      where: { id: reminderId, userToken: token, status: "active" },
+    const delivery = await prisma.reminderDeliveryLog.findFirst({
+      where: { reminderId, userToken: token, sessionId, deliveryStatus: { in: ["delivered", "acknowledged"] } },
+      orderBy: { deliveredAt: "desc" },
     });
-
-    if (!reminder) {
+    if (!delivery) {
       await sendToolResult(gptWs, callId, sessionId, token, false, {
-        message: "Reminder was not found or is no longer active.",
+        message: "No delivered occurrence was found in this conversation.",
       });
       return;
     }
-
     const now = new Date();
     await prisma.$transaction([
-      prisma.reminder.update({
-        where: { id: reminder.id },
-        data: {
-          // A recurring reminder remains available for its next occurrence.
-          // A one-time reminder is completed so it is never delivered again.
-          status: reminder.recurrence === "none" ? "completed" : "active",
-          identityKey: reminder.recurrence === "none" ? null : undefined,
-          acknowledgedAt: now,
-        },
-      }),
-      prisma.reminderDeliveryLog.updateMany({
-        where: {
-          reminderId: reminder.id,
-          userToken: token,
-          sessionId,
-          deliveryStatus: "delivered",
-        },
+      prisma.reminderDeliveryLog.update({
+        where: { id: delivery.id },
         data: { deliveryStatus: "acknowledged", acknowledgedAt: now },
+      }),
+      prisma.reminder.updateMany({
+        where: { id: reminderId, userToken: token, eventDatetime: delivery.occurrenceAt },
+        data: { acknowledgedAt: now },
       }),
     ]);
 
-    logger.info(`✅ Acknowledged reminder ${reminder.id} for token ${token}`);
+    logger.info(`✅ Acknowledged reminder ${reminderId} for session ${sessionId}`);
     await sendToolResult(gptWs, callId, sessionId, token, true, {
-      message:
-        reminder.recurrence === "none"
-          ? "Reminder completed."
-          : "Reminder acknowledged for this occurrence.",
+      message: "Reminder occurrence acknowledged. It will not be announced again.",
     });
   } catch (err) {
     logger.error("❌ Error acknowledging reminder:", err);

@@ -26,6 +26,7 @@ import {
   clearReminderSession,
   enqueueDueRemindersForSession,
   markReminderSlotFreeForNextResponse,
+  markReminderResponseStarted,
   maybeInjectNextReminder,
 } from "../services/reminderQueue.js";
 import {
@@ -384,6 +385,7 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
       /* ---------------------------------------------------------------------- */
 
       if (event.type === "response.created") {
+        markReminderResponseStarted(sessionId);
         currentResponseId = event.response?.id;
         responseActive = true;
         textChunkCount = 0;
@@ -472,7 +474,7 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
           response: event.response,
         });
 
-        markReminderSlotFreeForNextResponse(sessionId);
+        markReminderSlotFreeForNextResponse(sessionId, gptWs);
 
         const usage = event.response?.usage;
 

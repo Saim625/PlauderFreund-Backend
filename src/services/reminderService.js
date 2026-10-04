@@ -1,4 +1,6 @@
 import prisma from "../lib/db.js";
+import { DateTime } from "luxon";
+import { DEFAULT_REMINDER_TIMEZONE, reminderWindow } from "../utils/reminderSchedule.js";
 
 const TITLE_NOISE_WORDS = new Set([
   "daily",
@@ -36,18 +38,19 @@ export function buildReminderIdentityKey(title, reminderType = "general") {
 // 1. Validate & normalize a single raw reminder from GPT output
 // ---------------------------------------------------------------------------
 
-function normalizeReminder(raw) {
-  if (!raw.title || typeof raw.title !== "string" || !raw.title.trim()) {
+export function normalizeReminder(raw, timezone = DEFAULT_REMINDER_TIMEZONE) {
+  if (!raw || !raw.title || typeof raw.title !== "string" || !raw.title.trim()) {
     return null;
   }
 
   const validTypes = ["medication", "appointment", "birthday", "general"];
   const validRecurrences = ["none", "daily", "weekly", "yearly"];
 
+  // Require an explicit offset; never interpret AI dates in the server timezone.
   const safeDate = (val) => {
-    if (!val) return null;
-    const d = new Date(val);
-    return isNaN(d.getTime()) ? null : d;
+    if (typeof val !== "string" || !/T.*(?:Z|[+-]\d{2}:\d{2})$/i.test(val)) return null;
+    const date = DateTime.fromISO(val, { setZone: true });
+    return date.isValid ? date.toJSDate() : null;
   };
 
   const reminder = {
@@ -57,8 +60,7 @@ function normalizeReminder(raw) {
       ? raw.reminder_type
       : "general",
     eventDatetime: safeDate(raw.event_datetime),
-    remindFrom: safeDate(raw.remind_from),
-    remindUntil: safeDate(raw.remind_until),
+    timezone,
     recurrence: validRecurrences.includes(raw.recurrence)
       ? raw.recurrence
       : "none",
@@ -70,60 +72,8 @@ function normalizeReminder(raw) {
       : "create",
   };
 
-  // For medication and appointment — reject if event_datetime is missing
-  if (
-    ["medication", "appointment"].includes(reminder.reminderType) &&
-    !reminder.eventDatetime
-  ) {
-    console.warn(
-      `⚠️ Rejected reminder "${reminder.title}" — medication/appointment must have event_datetime`,
-    );
-    return null;
-  }
-
-  // Safety fix — if event_datetime exists but remind_from/until are missing, calculate them
-  if (reminder.eventDatetime) {
-    const event = reminder.eventDatetime;
-
-    if (reminder.reminderType === "medication") {
-      if (!reminder.remindFrom)
-        reminder.remindFrom = new Date(event.getTime() - 60 * 60 * 1000);
-      if (!reminder.remindUntil)
-        reminder.remindUntil = new Date(event.getTime() + 720 * 60 * 1000);
-    }
-
-    if (reminder.reminderType === "appointment") {
-      if (!reminder.remindFrom)
-        reminder.remindFrom = new Date(event.getTime() - 24 * 60 * 60 * 1000);
-      if (!reminder.remindUntil) {
-        const endOfDay = new Date(event);
-        endOfDay.setHours(23, 59, 59, 999);
-        reminder.remindUntil = endOfDay;
-      }
-    }
-
-    if (reminder.reminderType === "birthday") {
-      if (!reminder.remindFrom)
-        reminder.remindFrom = new Date(event.getTime() - 48 * 60 * 60 * 1000);
-      if (!reminder.remindUntil) {
-        const endOfDay = new Date(event);
-        endOfDay.setHours(23, 59, 59, 999);
-        reminder.remindUntil = endOfDay;
-      }
-    }
-    if (reminder.reminderType === "general" && reminder.eventDatetime) {
-      if (!reminder.remindFrom) {
-        reminder.remindFrom = new Date(
-          reminder.eventDatetime.getTime() - 24 * 60 * 60 * 1000,
-        ); // 24 hours before
-      }
-      if (!reminder.remindUntil) {
-        const endOfDay = new Date(reminder.eventDatetime);
-        endOfDay.setHours(23, 59, 59, 999);
-        reminder.remindUntil = endOfDay;
-      }
-    }
-  }
+  if (!reminder.eventDatetime) return null;
+  Object.assign(reminder, reminderWindow(reminder.eventDatetime, reminder.reminderType, timezone));
 
   return reminder;
 }
@@ -185,16 +135,17 @@ async function upsertReminder(userToken, reminder) {
       return "skipped";
     }
 
-    // Only overwrite fields where new value is non-null
+    const window = reminderWindow(reminder.eventDatetime, existing.reminderType, reminder.timezone);
+    // Recompute both boundaries; never reuse an old or AI-generated window.
     await prisma.reminder.update({
       where: { id: existing.id },
       data: {
         description: reminder.description ?? existing.description,
         eventDatetime: reminder.eventDatetime ?? existing.eventDatetime,
-        remindFrom: reminder.remindFrom ?? existing.remindFrom,
-        remindUntil: reminder.remindUntil ?? existing.remindUntil,
+        ...window,
+        timezone: reminder.timezone,
         recurrence: reminder.recurrence ?? existing.recurrence,
-        identityKey,
+        identityKey: buildReminderIdentityKey(existing.title, existing.reminderType),
         updatedAt: new Date(),
       },
     });
@@ -212,6 +163,7 @@ async function upsertReminder(userToken, reminder) {
           remindFrom: reminder.remindFrom,
           remindUntil: reminder.remindUntil,
           recurrence: reminder.recurrence,
+          timezone: reminder.timezone,
           identityKey,
           status: "active",
         },
@@ -243,7 +195,7 @@ async function upsertReminder(userToken, reminder) {
 //    Receives raw reminders array already extracted by GPT (no GPT call here)
 // ---------------------------------------------------------------------------
 
-export async function parseAndSaveReminders(userToken, rawReminders) {
+export async function parseAndSaveReminders(userToken, rawReminders, timezone = DEFAULT_REMINDER_TIMEZONE) {
   if (!Array.isArray(rawReminders) || rawReminders.length === 0) {
     console.log("ℹ️ No reminders to save");
     return;
@@ -256,11 +208,11 @@ export async function parseAndSaveReminders(userToken, rawReminders) {
   let skipped = 0;
 
   for (const rawReminder of rawReminders) {
-    const reminder = normalizeReminder(rawReminder);
+    const reminder = normalizeReminder(rawReminder, timezone);
 
     if (!reminder) {
       skipped++;
-      console.warn("⚠️ Skipped invalid reminder (missing title):", rawReminder);
+      console.warn("⚠️ Skipped invalid reminder (missing title or valid event time):", rawReminder);
       continue;
     }
 

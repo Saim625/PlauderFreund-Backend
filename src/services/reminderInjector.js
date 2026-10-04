@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 /**
  * Injects a reminder into the active GPT realtime session.
  * Sends it as a hidden system message so GPT weaves it naturally
@@ -13,17 +15,21 @@ export function injectReminderIntoGPT(gptWs, reminder) {
     ? `${reminder.title} — ${reminder.description}`
     : reminder.title;
 
+  const itemId = `rem_${randomUUID().replaceAll("-", "").slice(0, 24)}`;
+
   // Step 1: Inject reminder as hidden system context
   gptWs.send(
     JSON.stringify({
       type: "conversation.item.create",
       item: {
+        id: itemId,
         type: "message",
         role: "system",
         content: [
           {
             type: "input_text",
             text: `[REMINDER ID:${reminder.id}] The user has a pending reminder: "${reminderText}". 
+Mention this occurrence exactly once, in your next response only. Do not repeat it in later responses unless the user asks. Its scheduled time is ${reminder.eventDatetime.toISOString()} (timezone ${reminder.timezone}).
 Acknowledge it warmly and naturally in your next response — as if you remembered it yourself. 
 Keep it brief. Do not make it feel like an automated notification.
 Example style: "Ach, übrigens — vergiss nicht, ..." (adapt to conversation language).
@@ -33,4 +39,5 @@ After mentioning it, continue the conversation normally. If the user responds th
       },
     }),
   );
+  return itemId;
 }
