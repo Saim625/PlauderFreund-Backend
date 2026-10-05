@@ -47,10 +47,11 @@ export function normalizeReminder(raw, timezone = DEFAULT_REMINDER_TIMEZONE) {
   const validRecurrences = ["none", "daily", "weekly", "yearly"];
 
   // Require an explicit offset; never interpret AI dates in the server timezone.
-  const safeDate = (val) => {
+  const validatedTimestamp = (val) => {
     if (typeof val !== "string" || !/T.*(?:Z|[+-]\d{2}:\d{2})$/i.test(val)) return null;
     const date = DateTime.fromISO(val, { setZone: true });
-    return date.isValid ? date.toJSDate() : null;
+    // Preserve the original clock time and offset for Prisma/PostgreSQL.
+    return date.isValid ? val : null;
   };
 
   const reminder = {
@@ -59,7 +60,7 @@ export function normalizeReminder(raw, timezone = DEFAULT_REMINDER_TIMEZONE) {
     reminderType: validTypes.includes(raw.reminder_type)
       ? raw.reminder_type
       : "general",
-    eventDatetime: safeDate(raw.event_datetime),
+    eventDatetime: validatedTimestamp(raw.event_datetime),
     timezone,
     recurrence: validRecurrences.includes(raw.recurrence)
       ? raw.recurrence
@@ -73,7 +74,7 @@ export function normalizeReminder(raw, timezone = DEFAULT_REMINDER_TIMEZONE) {
   };
 
   if (!reminder.eventDatetime) return null;
-  Object.assign(reminder, reminderWindow(reminder.eventDatetime, reminder.reminderType, timezone));
+  Object.assign(reminder, reminderWindow(new Date(reminder.eventDatetime), reminder.reminderType, timezone));
 
   return reminder;
 }
@@ -135,7 +136,7 @@ async function upsertReminder(userToken, reminder) {
       return "skipped";
     }
 
-    const window = reminderWindow(reminder.eventDatetime, existing.reminderType, reminder.timezone);
+    const window = reminderWindow(new Date(reminder.eventDatetime), existing.reminderType, reminder.timezone);
     // Recompute both boundaries; never reuse an old or AI-generated window.
     await prisma.reminder.update({
       where: { id: existing.id },
