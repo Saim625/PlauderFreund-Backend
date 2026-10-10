@@ -1,3 +1,4 @@
+import { reminderTimeContext } from "../utils/reminderSchedule.js";
 import { randomUUID } from "node:crypto";
 
 /**
@@ -8,7 +9,7 @@ import { randomUUID } from "node:crypto";
  * @param {WebSocket} gptWs - The active GPT realtime WebSocket
  * @param {Object} reminder - Reminder object from DB
  */
-export function injectReminderIntoGPT(gptWs, reminder) {
+export function injectReminderIntoGPT(gptWs, reminder, now = new Date()) {
   if (!gptWs || gptWs.readyState !== 1) return; // 1 = OPEN
 
   const reminderText = reminder.description
@@ -28,12 +29,10 @@ export function injectReminderIntoGPT(gptWs, reminder) {
         content: [
           {
             type: "input_text",
-            text: `[REMINDER ID:${reminder.id}] The user has a pending reminder: "${reminderText}". 
-Mention this occurrence exactly once, in your next response only. Do not repeat it in later responses unless the user asks. Its scheduled time is ${reminder.eventDatetime.toISOString()} (timezone ${reminder.timezone}).
-Acknowledge it warmly and naturally in your next response — as if you remembered it yourself. 
-Keep it brief. Do not make it feel like an automated notification.
-Example style: "Ach, übrigens — vergiss nicht, ..." (adapt to conversation language).
-After mentioning it, continue the conversation normally. If the user responds that they have already done it, taken it, or are aware — call the acknowledge_reminder function with reminder_id: ${reminder.id}.`,
+            text: `[REMINDER ID:${reminder.id}] Activity: "${reminderText}". Scheduled: ${reminderTimeContext(reminder, now)}.
+Answer the user's current message normally FIRST. Then add one short, natural sentence about this activity, in the user's language, within the same response. Do not replace the answer with a reminder or announce that the user "set a reminder".
+Use the supplied day accurately: "tomorrow" / "morgen" for tomorrow, "today" / "heute" for today, and the date for other days. If the time has passed, say it was scheduled then; do not describe it as upcoming or tell the user to take a missed medication dose.
+Mention it once only today unless the user asks. If the user acknowledges it, call acknowledge_reminder with reminder_id: ${reminder.id}.`,
           },
         ],
       },

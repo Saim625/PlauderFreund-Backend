@@ -1,31 +1,49 @@
-# Reminder windows and occurrence delivery
+# Reminder windows and daily delivery
 
-The backend owns delivery windows. Medication: 1 hour before through 12 hours
-following the event. Appointment/general: 24 hours before through the event's
-local end of day. Birthday: 48 hours before through local end of day.
-AI window fields are ignored. New reminders without a valid, offset-qualified
-ISO event time are rejected; existing undated reminders are not eligible.
+The backend owns windows; AI-provided window fields are ignored.
 
-Delivery is one attempt per `(reminderId, eventDatetime)`, across all sessions
+| Type | Starts before event | Ends |
+| --- | --- | --- |
+| Medication | 1 hour | 2 hours after event |
+| Appointment | 24 hours | 2 hours after event |
+| General | 2 hours | 2 hours after event |
+| Birthday | 48 hours | End of event's local day |
+
+Automatic delivery requires three distinct, nonempty user transcriptions in the
+current session. The scheduler only queues due reminders. It cannot bypass this
+rule or start a reminder-only response. Context is prepared while no response is
+active, for the next normal response (the third response or later, depending on
+transcription/response timing). The AI is instructed to answer the user first,
+then mention one reminder naturally, using its local date and time and accurate
+“today” / “tomorrow” wording. Explicit requests to list reminders remain allowed.
+
+Delivery is one attempt per `(reminderId, local calendar date)`, across sessions
 and backend workers, protected by a PostgreSQL unique index and transaction.
-The claim is recorded before sending context to the realtime AI. If the socket
-fails or playback is interrupted, it is not retried. This is at-most-once
-injection, not proof the user heard the announcement. Duplicate database
-reminders with different IDs still need separate review.
+The date uses the reminder's stored timezone, not the server timezone.
+An appointment tomorrow can be mentioned once today and once tomorrow while
+its window is open. Acknowledgement is optional and does not enable another
+announcement that day. Editing a reminder's time does not reset its daily limit.
 
-One-time reminders become completed on delivery. Recurring reminders stay on
-that occurrence until its entire window closes, then advance to the first
-non-expired occurrence. Cleanup runs every five minutes and on startup, even
-without a connected user. It preserves local clock time using the stored
-IANA timezone. Acknowledgement records the delivered occurrence and does not
-reschedule or suppress a later occurrence. Delivery still happens only during
-active conversations, not via an offline alarm or outgoing call.
+The claim is recorded before sending context to the realtime AI. If the call
+ends before the next response, sending fails, or playback is interrupted, the
+attempt is not retried that day. This is at-most-once context injection, not proof
+the user heard the announcement. Model wording still requires live-call checks.
+Duplicate database reminders with different IDs are separate reminders.
+
+After the entire window closes, cleanup advances daily/weekly/yearly reminders
+to the first occurrence whose window has not closed. It preserves local clock
+time using the stored IANA timezone. Cleanup runs every five minutes and at
+startup, even without a connected user. It does not advance the event immediately
+after delivery or at midnight. One-time reminders become completed if attempted,
+or expired if never attempted. Delivery only happens during active conversations.
+
+The existing event-time save path is unchanged: validated offset-qualified ISO
+values go to Prisma without an added manual hour adjustment.
 
 ## Deploy
 
-Stop the old backend workers before migrating; older code does not participate
-in the occurrence guard. Install dependencies, apply migrations, generate the
-client, then restart all workers:
+Stop old backend workers before migrating; all workers must use the daily guard.
+Install dependencies, apply migrations, generate the client, then restart:
 
 ```sh
 npm ci
@@ -33,16 +51,12 @@ npx prisma migrate deploy
 npx prisma generate
 ```
 
-Migration `20261003000000_strict_reminder_occurrences` repairs windows on active,
-dated rows using their stored category. Existing rows have no recorded timezone,
-so they default to Europe/Berlin (the telephony default). Review legacy web
-reminders created in other timezones before deployment. New saves/updates store
-the actual session timezone.
-
-Historical logs matching the current stored window are attached to the current
-occurrence (only one gets the unique key; historical duplicates are preserved).
-Older logs do not record event times, so historical occurrence attribution is
-best-effort. The migration cannot infer a misclassified reminder's true category.
+Migration `20261010000000_daily_reminder_delivery` repairs windows on active,
+dated reminders without changing their event times. It backfills daily keys from
+historical delivered/acknowledged logs using the currently stored timezone;
+duplicate logs are preserved. Completed reminders are not reopened. Legacy rows
+whose timezone was defaulted to Europe/Berlin by the earlier occurrence migration
+still need review if they were actually created in another timezone.
 
 ## Verify
 
@@ -53,6 +67,7 @@ and remove that user's records afterward. Never point them at production.
 ```sh
 REMINDER_TEST_DATABASE_URL='postgresql://USER@HOST:PORT/TEST_DB' npm test
 psql 'postgresql://USER@HOST:PORT/TEST_DB' -f tests/reminderMigration.sql
+psql 'postgresql://USER@HOST:PORT/TEST_DB' -f tests/reminderDailyMigration.sql
 ```
 
-The migration test uses a temporary schema in a rolled-back transaction.
+Migration fixtures use isolated schemas inside rolled-back transactions.

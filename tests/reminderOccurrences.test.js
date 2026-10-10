@@ -7,7 +7,7 @@ test('reminder occurrence integration tests', { skip: !process.env.REMINDER_TEST
   process.env.DATABASE_URL = process.env.REMINDER_TEST_DATABASE_URL;
   const { default: db } = await import('../src/lib/db.js');
   const { reminderWindow } = await import('../src/utils/reminderSchedule.js');
-  const { claimReminderOccurrence, enqueueDueRemindersForSession, markReminderResponseStarted, markReminderSlotFreeForNextResponse, clearReminderSession } = await import('../src/services/reminderQueue.js');
+  const { claimReminderOccurrence, enqueueDueRemindersForSession, recordReminderUserMessage, maybeInjectNextReminder, markReminderResponseStarted, markReminderSlotFreeForNextResponse, clearReminderSession } = await import('../src/services/reminderQueue.js');
   const { cleanupReminderOccurrences } = await import('../src/services/reminderScheduler.js');
   const { parseAndSaveReminders } = await import('../src/services/reminderService.js');
   const { handleToolCall } = await import('../src/utils/toolHandlers.js');
@@ -34,25 +34,27 @@ test('reminder occurrence integration tests', { skip: !process.env.REMINDER_TEST
       await db.reminder.update({where:{id:r.id},data:{remindFrom:null,remindUntil:null}});
       assert.equal(await claimReminderOccurrence(r.id,r.eventDatetime,token,'null',db,now),null);
     });
-    await t.test('one-time delivery completes reminder; acknowledgement remains possible', async () => {
+    await t.test('one-time stays active through its window, completes after closure, and can be acknowledged', async () => {
       const r = await make({recurrence:'none'});
       assert.ok(await claimReminderOccurrence(r.id,r.eventDatetime,token,'once',db,now));
-      assert.equal((await db.reminder.findUnique({where:{id:r.id}})).status,'completed');
+      assert.equal((await db.reminder.findUnique({where:{id:r.id}})).status,'active');
       const socket = ws();
       await handleToolCall({name:'acknowledge_reminder',call_id:'ack',arguments:JSON.stringify({reminder_id:r.id})},'once',token,socket);
       const log = await db.reminderDeliveryLog.findFirst({where:{reminderId:r.id}});
       assert.equal(log.deliveryStatus,'acknowledged');
       assert.equal(await claimReminderOccurrence(r.id,r.eventDatetime,token,'next-session',db,now),null);
+      await cleanupReminderOccurrences(db,new Date(+r.remindUntil+1));
+      assert.equal((await db.reminder.findUnique({where:{id:r.id}})).status,'completed');
     });
     await t.test('do not reschedule an evening dose at midnight while its window is open', async () => {
-      const eventDatetime = new Date('2026-10-02T20:00:00+02:00');
+      const eventDatetime = new Date('2026-10-02T23:00:00+02:00');
       const r = await make({eventDatetime,...reminderWindow(eventDatetime,'medication'),recurrence:'daily'});
       await cleanupReminderOccurrences(db,new Date('2026-10-03T00:00:00+02:00'));
       assert.equal(+(await db.reminder.findUnique({where:{id:r.id}})).eventDatetime,+eventDatetime);
       await cleanupReminderOccurrences(db,new Date('2026-10-03T09:00:00+02:00'));
       const next = await db.reminder.findUnique({where:{id:r.id}});
-      assert.equal(next.eventDatetime.toISOString(),'2026-10-03T18:00:00.000Z');
-      assert.equal(next.remindFrom.toISOString(),'2026-10-03T17:00:00.000Z');
+      assert.equal(next.eventDatetime.toISOString(),'2026-10-03T21:00:00.000Z');
+      assert.equal(next.remindFrom.toISOString(),'2026-10-03T20:00:00.000Z');
     });
     await t.test('next occurrence delivers once; old acknowledgement does not acknowledge it', async () => {
       const r = await make();
@@ -65,6 +67,22 @@ test('reminder occurrence integration tests', { skip: !process.env.REMINDER_TEST
       assert.ok(await claimReminderOccurrence(r.id,next.eventDatetime,token,'next-week',db,next.remindFrom));
       assert.equal(await claimReminderOccurrence(r.id,next.eventDatetime,token,'next-week-again',db,next.remindFrom),null);
     });
+    await t.test('appointment delivers once per local day, without moving its actual date', async () => {
+      const eventDatetime = new Date('2026-10-11T11:00:00+05:00');
+      const r = await make({reminderType:'appointment', timezone:'Asia/Karachi',recurrence:'none',eventDatetime,...reminderWindow(eventDatetime,'appointment','Asia/Karachi')});
+      const yesterday = new Date('2026-10-10T12:00:00+05:00');
+      const today = new Date('2026-10-11T10:00:00+05:00');
+      assert.ok(await claimReminderOccurrence(r.id,eventDatetime,token,'day-before',db,yesterday));
+      assert.equal(await claimReminderOccurrence(r.id,eventDatetime,token,'day-before-again',db,yesterday),null);
+      assert.ok(await claimReminderOccurrence(r.id,eventDatetime,token,'event-day',db,today));
+      assert.equal(await claimReminderOccurrence(r.id,eventDatetime,token,'event-day-again',db,today),null);
+      assert.equal(+(await db.reminder.findUnique({where:{id:r.id}})).eventDatetime,+eventDatetime);
+      const logs = await db.reminderDeliveryLog.findMany({where:{reminderId:r.id},orderBy:{deliveryDate:'asc'}});
+      assert.deepEqual(logs.map(x=>x.deliveryDate),['2026-10-10','2026-10-11']);
+      const editedEvent = new Date('2026-10-11T12:00:00+05:00');
+      await db.reminder.update({where:{id:r.id},data:{eventDatetime:editedEvent,...reminderWindow(editedEvent,'appointment','Asia/Karachi')}});
+      assert.equal(await claimReminderOccurrence(r.id,editedEvent,token,'edited-same-day',db,today),null);
+    });
     await t.test('save and update always overwrite AI windows using the stored medication category', async () => {
       const input = {title:'Unique injection',reminder_type:'medication',recurrence:'weekly',event_datetime:'2026-10-09T06:30:00+02:00',remind_from:'2026-10-08T04:30:00Z',action:'create'};
       await parseAndSaveReminders(token,[input],'Europe/Berlin');
@@ -73,21 +91,35 @@ test('reminder occurrence integration tests', { skip: !process.env.REMINDER_TEST
       await parseAndSaveReminders(token,[{...input,existing_reminder_id:r.id,action:'update',reminder_type:'general',event_datetime:'2026-10-09T07:30:00+02:00'}],'Europe/Berlin');
       r = await db.reminder.findUnique({where:{id:r.id}});
       assert.equal(r.remindFrom.toISOString(),'2026-10-09T04:30:00.000Z');
-      assert.equal(r.remindUntil.toISOString(),'2026-10-09T17:30:00.000Z');
+      assert.equal(r.remindUntil.toISOString(),'2026-10-09T07:30:00.000Z');
     });
     await t.test('same-session concurrent checks inject once and remove context only after a consuming response', async () => {
       // Other test rows are no longer candidates in this isolated user session.
       await db.reminder.updateMany({where:{userToken:token},data:{status:'expired'}});
       const r = await make();
       const socket = ws();
-      await Promise.all([enqueueDueRemindersForSession(token,'queue',socket),enqueueDueRemindersForSession(token,'queue',socket)]);
+      await Promise.all([enqueueDueRemindersForSession(token,'queue'),enqueueDueRemindersForSession(token,'queue')]);
+      assert.equal(socket.sent.length,0); // Scheduler only queues.
+      assert.equal(await maybeInjectNextReminder('queue',token,socket),false);
+      recordReminderUserMessage('queue','one');
+      recordReminderUserMessage('queue','two');
+      recordReminderUserMessage('queue','two'); // Duplicate transcript is not another turn.
+      assert.equal(await maybeInjectNextReminder('queue',token,socket),false);
+      recordReminderUserMessage('queue','three');
+      markReminderResponseStarted('queue');
+      assert.equal(await maybeInjectNextReminder('queue',token,socket),false);
+      markReminderSlotFreeForNextResponse('queue',socket);
+      await Promise.all([maybeInjectNextReminder('queue',token,socket),maybeInjectNextReminder('queue',token,socket)]);
       assert.equal(socket.sent.filter(x=>x.type==='conversation.item.create').length,1);
       markReminderSlotFreeForNextResponse('queue',socket);
       assert.equal(socket.sent.filter(x=>x.type==='conversation.item.delete').length,0);
       markReminderResponseStarted('queue');
+      markReminderSlotFreeForNextResponse('queue',socket,{status:'completed',output:[{type:'function_call'}]});
+      assert.equal(socket.sent.filter(x=>x.type==='conversation.item.delete').length,0);
+      markReminderResponseStarted('queue');
       markReminderSlotFreeForNextResponse('queue',socket);
       assert.equal(socket.sent.filter(x=>x.type==='conversation.item.delete').length,1);
-      await enqueueDueRemindersForSession(token,'new-call',socket);
+      await enqueueDueRemindersForSession(token,'new-call');
       assert.equal(socket.sent.filter(x=>x.type==='conversation.item.create').length,2);
       assert.equal(await db.reminderDeliveryLog.count({where:{reminderId:r.id}}),1);
       clearReminderSession('queue'); clearReminderSession('new-call');

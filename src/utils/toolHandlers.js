@@ -1,6 +1,5 @@
 import prisma from "../lib/db.js";
 import logger from "./logger.js";
-import { maybeInjectNextReminder } from "../services/reminderQueue.js";
 import { WebSearchService } from "../services/WebSearchService.js";
 
 function resolveTimezoneArg(timezone) {
@@ -28,15 +27,6 @@ export async function sendToolResult(
       },
     }),
   );
-
-  // If a reminder is queued, inject ONE so it can be spoken in this response.
-  if (sessionId) {
-    try {
-      await maybeInjectNextReminder(sessionId, token, gptWs);
-    } catch (err) {
-      logger.error(`❌ [${sessionId}] Reminder injection failed:`, err);
-    }
-  }
 
   gptWs.send(
     JSON.stringify({
@@ -219,7 +209,7 @@ async function handleAcknowledgeReminder(
 
     logger.info(`✅ Acknowledged reminder ${reminderId} for session ${sessionId}`);
     await sendToolResult(gptWs, callId, sessionId, token, true, {
-      message: "Reminder occurrence acknowledged. It will not be announced again.",
+      message: "Reminder acknowledged. It will not be announced again today.",
     });
   } catch (err) {
     logger.error("❌ Error acknowledging reminder:", err);

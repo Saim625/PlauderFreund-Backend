@@ -184,12 +184,13 @@ model ReminderDeliveryLog {
   // Delivery Details
   sessionId        String    @map("session_id")
   occurrenceAt     DateTime? @map("occurrence_at") @db.Timestamptz
+  deliveryDate     String?   @map("delivery_date") @db.VarChar(10)
   deliveredAt      DateTime  @default(now()) @map("delivered_at") @db.Timestamptz
   deliveryStatus   String?   @map("delivery_status") @db.VarChar(30) // 'delivered', 'acknowledged'
   acknowledgedAt   DateTime? @map("acknowledged_at") @db.Timestamptz
 
   @@map("reminder_delivery_log")
-  @@unique([reminderId, occurrenceAt])
+  @@unique([reminderId, deliveryDate])
 }
 
 model GreetingHistory {

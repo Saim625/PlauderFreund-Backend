@@ -27,6 +27,8 @@ import {
   enqueueDueRemindersForSession,
   markReminderSlotFreeForNextResponse,
   markReminderResponseStarted,
+  recordReminderUserMessage,
+  hasPendingReminder,
   maybeInjectNextReminder,
 } from "../services/reminderQueue.js";
 import {
@@ -71,8 +73,6 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
   const TTS_MIN_TIMED_PHRASE_CHARS = 20;
   const TTS_MAX_PHRASE_CHARS = 90;
 
-  let userMessageCount = 0;
-  const REMINDER_TRIGGER_AFTER_MESSAGES = 3;
 
   let gptReconnectAttempts = 0;
   const GPT_MAX_RECONNECT = 5;
@@ -353,12 +353,14 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
 
         markUserAudio(sessionId);
 
-        userMessageCount++;
-
-        if (userMessageCount === REMINDER_TRIGGER_AFTER_MESSAGES) {
-          await enqueueDueRemindersForSession(token, sessionId, gptWs);
-
-          logger.info(`🔔 [${sessionId}] Reminder queue triggered`);
+        if (userTranscript?.trim()) {
+          recordReminderUserMessage(sessionId, event.item_id);
+          try {
+            await enqueueDueRemindersForSession(token, sessionId);
+            await maybeInjectNextReminder(sessionId, token, gptWs);
+          } catch (err) {
+            logger.error(`❌ [${sessionId}] Reminder check failed: ${err.message}`);
+          }
         }
 
         const s = sessions.get(sessionId);
@@ -474,7 +476,13 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
           response: event.response,
         });
 
-        markReminderSlotFreeForNextResponse(sessionId, gptWs);
+        markReminderSlotFreeForNextResponse(sessionId, gptWs, event.response);
+        // Prepare for the next normal response, without starting a reminder-only response.
+        try {
+          await maybeInjectNextReminder(sessionId, token, gptWs);
+        } catch (err) {
+          logger.error(`❌ [${sessionId}] Reminder preparation failed: ${err.message}`);
+        }
 
         const usage = event.response?.usage;
 
@@ -769,14 +777,10 @@ export async function handleRealtimeAI(socket, token, timezone, options = {}) {
       return;
     }
 
+    // A prepared reminder belongs in a normal answer, not a silence check-in.
+    if (hasPendingReminder(sessionId)) return;
+
     markReengagementTriggered(sessionId);
-
-    try {
-      await maybeInjectNextReminder(sessionId, token, gptWs);
-    } catch (err) {
-      logger.error(`❌ [${sessionId}] Reminder injection failed:`, err);
-    }
-
     gptWs.send(
       JSON.stringify({
         type: "response.create",

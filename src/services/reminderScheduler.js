@@ -19,7 +19,7 @@ export async function cleanupReminderOccurrences(db = prisma, now = new Date()) 
         remindFrom: next.newRemindFrom,
         remindUntil: next.newRemindUntil,
         acknowledgedAt: null,
-      } : { status: "expired", identityKey: null },
+      } : { status: reminder.timesReminded > 0 ? "completed" : "expired", identityKey: null },
     });
   }
 }
@@ -30,7 +30,7 @@ export function startReminderScheduler() {
       try {
         const gptWs = socket.data?.gptWs;
         if (!gptWs) continue;
-        await enqueueDueRemindersForSession(token, socket.id, gptWs);
+        await enqueueDueRemindersForSession(token, socket.id);
       } catch (err) {
         logger.error(`❌ Reminder delivery check failed: ${err.message}`);
       }
