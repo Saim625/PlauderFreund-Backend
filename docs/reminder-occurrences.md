@@ -13,8 +13,8 @@ Automatic delivery requires three distinct, nonempty user transcriptions in the
 current session. The scheduler only queues due reminders. It cannot bypass this
 rule or start a reminder-only response. Context is prepared while no response is
 active, for the next normal response (the third response or later, depending on
-transcription/response timing). The AI is instructed to answer the user first,
-then mention one reminder naturally, using its local date and time and accurate
+transcription/response timing). The AI is instructed to start with a brief answer,
+mention one reminder early within the response, then continue answering, using its local date and time and accurate
 “today” / “tomorrow” wording. Explicit requests to list reminders remain allowed.
 
 Delivery is one attempt per `(reminderId, local calendar date)`, across sessions
@@ -29,6 +29,12 @@ ends before the next response, sending fails, or playback is interrupted, the
 attempt is not retried that day. This is at-most-once context injection, not proof
 the user heard the announcement. Model wording still requires live-call checks.
 Duplicate database reminders with different IDs are separate reminders.
+
+For missed-delivery diagnosis, `REMINDER_CHECK` records due IDs, queued IDs,
+the distinct user message count, and IDs already attempted that day.
+`REMINDER_DEFERRED` explains the delivery gate. `REMINDER_RESPONSE_STARTED` and
+`REMINDER_RESPONSE_FINISHED` track the response associated with reminder context;
+these events do not confirm audible playback.
 
 After the entire window closes, cleanup advances daily/weekly/yearly reminders
 to the first occurrence whose window has not closed. It preserves local clock

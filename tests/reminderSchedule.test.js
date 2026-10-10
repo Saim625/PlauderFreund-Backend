@@ -71,3 +71,13 @@ test('relative wording and daily keys use the reminder timezone at local midnigh
   assert.equal(reminderDeliveryDate(r,date('2026-10-10T19:00:00Z')), '2026-10-11');
   assert.match(reminderTimeContext(r,date('2026-10-11T07:00:00Z')), /already passed/);
 });
+
+test('a general lunch reminder at 17:00 is due at 16:40 in Karachi and Berlin', () => {
+  for (const [timezone, offset] of [['Asia/Karachi', '+05:00'], ['Europe/Berlin', '+02:00']]) {
+    const eventDatetime = date(`2026-10-10T17:00:00${offset}`);
+    const now = date(`2026-10-10T16:40:00${offset}`);
+    const reminder = {status:'active',eventDatetime,timezone,...reminderWindow(eventDatetime,'general',timezone)};
+    assert.equal(isReminderDue(reminder,now),true);
+    assert.match(reminderTimeContext(reminder,now),/^today at 17:00/);
+  }
+});

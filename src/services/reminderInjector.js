@@ -30,7 +30,7 @@ export function injectReminderIntoGPT(gptWs, reminder, now = new Date()) {
           {
             type: "input_text",
             text: `[REMINDER ID:${reminder.id}] Activity: "${reminderText}". Scheduled: ${reminderTimeContext(reminder, now)}.
-Answer the user's current message normally FIRST. Then add one short, natural sentence about this activity, in the user's language, within the same response. Do not replace the answer with a reminder or announce that the user "set a reminder".
+Begin with a brief response to the user's current message, weave in one short reminder sentence early in the middle of that answer, then continue the conversation naturally. Do not save the reminder for the end of a long answer. Use the user's language. Do not replace the answer with a reminder or announce that the user "set a reminder".
 Use the supplied day accurately: "tomorrow" / "morgen" for tomorrow, "today" / "heute" for today, and the date for other days. If the time has passed, say it was scheduled then; do not describe it as upcoming or tell the user to take a missed medication dose.
 Mention it once only today unless the user asks. If the user acknowledges it, call acknowledge_reminder with reminder_id: ${reminder.id}.`,
           },

@@ -81,9 +81,8 @@ export async function enqueueDueRemindersForSession(
   const st = getOrCreateState(sessionId);
   const due = await getDueReminders(userToken, now);
 
-  if (!due.length) return { enqueued: 0, totalDue: 0 };
-
   let enqueued = 0;
+  const alreadyAttempted = [];
   for (const r of due) {
     if (st.inFlightReminderId === r.id) continue;
     if (st.queue.some((item) => item.id === r.id)) continue;
@@ -91,13 +90,18 @@ export async function enqueueDueRemindersForSession(
     const delivered = await prisma.reminderDeliveryLog.findUnique({
       where: { reminderId_deliveryDate: { reminderId: r.id, deliveryDate: reminderDeliveryDate(r, now) } },
     });
-    if (delivered) continue;
+    if (delivered) { alreadyAttempted.push(r.id); continue; }
     // Recheck after await: another scheduler tick may have queued this reminder.
     if (st.inFlightReminderId === r.id || st.queue.some((item) => item.id === r.id)) continue;
     st.queue.push({ id: r.id, occurrenceAt: r.eventDatetime });
     enqueued++;
   }
 
+  logger.info(`[${sessionId}] REMINDER_CHECK ${JSON.stringify({
+    at: now.toISOString(), userMessages: st.userMessages.size,
+    dueIds: due.map((r) => r.id), alreadyAttemptedToday: alreadyAttempted,
+    queuedIds: st.queue.map((r) => r.id), responseActive: st.responseActive,
+  })}`);
   return { enqueued, totalDue: due.length };
 }
 
@@ -114,7 +118,17 @@ export function hasPendingReminder(sessionId) {
 // All automatic delivery paths share this gate. The scheduler only queues.
 export async function maybeInjectNextReminder(sessionId, userToken, gptWs, now = new Date()) {
   const st = reminderStateBySession.get(sessionId);
-  if (!st || st.userMessages.size < 3 || st.responseActive || st.preparing || st.contextItemId) return false;
+  if (!st) return false;
+  const reason = st.userMessages.size < 3 ? "waiting_for_three_user_messages"
+    : st.responseActive ? "waiting_for_response_end"
+    : st.preparing ? "preparation_in_progress"
+    : st.contextItemId ? "context_already_prepared" : null;
+  if (reason) {
+    if (st.queue.length || st.pendingReminder || st.contextItemId) {
+      logger.info(`[${sessionId}] REMINDER_DEFERRED reason=${reason} userMessages=${st.userMessages.size}`);
+    }
+    return false;
+  }
   if (!gptWs || gptWs.readyState !== 1) return false;
   st.preparing = true;
   try {
@@ -154,6 +168,9 @@ export function markReminderResponseStarted(sessionId) {
   const st = getOrCreateState(sessionId);
   st.responseActive = true;
   st.responseItemId = st.contextItemId;
+  if (st.contextItemId) {
+    logger.info(`[${sessionId}] REMINDER_RESPONSE_STARTED reminderId=${st.inFlightReminderId} itemId=${st.contextItemId}`);
+  }
 }
 
 // Call when an assistant response finishes; allows the next reminder to be injected on the next response.
@@ -162,6 +179,7 @@ export function markReminderSlotFreeForNextResponse(sessionId, gptWs, response) 
   if (!st) return;
   st.responseActive = false;
   if (!st.responseItemId) return;
+  logger.info(`[${sessionId}] REMINDER_RESPONSE_FINISHED reminderId=${st.inFlightReminderId} status=${response?.status ?? "unknown"}`);
   // A tool-only response has not spoken yet; retain context for its continuation.
   if (response?.status === "completed" && response.output?.some((item) => item.type === "function_call") &&
       !response.output.some((item) => item.content?.some((part) => part.text?.trim() || part.transcript?.trim()))) {
