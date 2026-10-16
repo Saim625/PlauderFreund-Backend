@@ -3,6 +3,8 @@ import { updateMemorySummary } from "../controllers/memoryController.js";
 import { getGPTResponse } from "./gptService.js";
 import { parseAndSaveReminders } from "./reminderService.js"; // no longer calls GPT
 import { addChatTokens } from "./usageTracker.js";
+import { randomUUID } from "node:crypto";
+import logger from "../utils/logger.js";
 
 // A Conversation is shared by all sessions of one user. Serializing flushes
 // prevents two near-simultaneous disconnects from extracting the same messages.
@@ -234,12 +236,38 @@ Return ONLY this JSON. No explanation, no markdown:
 """${userConversationText}"""
 `;
 
+    // Log the exact extraction prompt and returned content under one trace ID.
+    // Do not include the user's access token or API credentials in these logs.
+    const extractionTraceId = randomUUID();
+    const extractionContext = {
+      traceId: extractionTraceId,
+      sessionId: sessionId ?? null,
+      model: chatModel,
+      timezone: safeTimezone,
+      referenceTimeUtc: now.toISOString(),
+    };
+    const extractionMessages = [{ role: "user", content: prompt }];
+    logger.info(
+      `EXTRACTION_INPUT BEGIN traceId=${extractionTraceId}\n` +
+      `${JSON.stringify({ ...extractionContext, role: "user" }, null, 2)}\n` +
+      `--- EXACT PROMPT ---\n${prompt}\n` +
+      `EXTRACTION_INPUT END traceId=${extractionTraceId}`,
+    );
+
     // 4️⃣ Single GPT call
     const {
       content: raw,
       inputTokens,
       outputTokens,
-    } = await getGPTResponse([{ role: "user", content: prompt }], chatModel);
+    } = await getGPTResponse(extractionMessages, chatModel);
+
+    // Log before parsing so malformed or empty responses are also visible.
+    logger.info(
+      `EXTRACTION_OUTPUT BEGIN traceId=${extractionTraceId}\n` +
+      `${JSON.stringify({ ...extractionContext, inputTokens, outputTokens, hasContent: Boolean(raw) }, null, 2)}\n` +
+      `--- RETURNED CONTENT (BEFORE PARSING) ---\n${raw ?? "[NO CONTENT RETURNED]"}\n` +
+      `EXTRACTION_OUTPUT END traceId=${extractionTraceId}`,
+    );
 
     // Track chat token usage for this extraction call
     if (sessionId) {
