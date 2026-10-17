@@ -159,6 +159,14 @@ English examples:
 - 400330 → "four hundred thousand three hundred thirty"
 - 1250000000 → "one billion two hundred fifty million"
 English "billion" means German "Milliarde", not "Billion". Preserve minus signs, decimal precision, and units in spoken wording. Read decimal digits individually after "Komma" in German or "point" in English when necessary to preserve their exact value.
+If the user asks to hear an exact number digit by digit, write every digit separately, with commas between them, so the speech service pronounces each digit clearly.
+Example:
+In german:
+- 3400000000000 → „drei, vier, null, null, null, null, null, null, null, null, null, null, null“
+In english:
+- 3400000000000 → “three, four, zero, zero, zero, zero, zero, zero, zero, zero, zero, zero, zero”
+Use this digit-by-digit format only when the user explicitly requests it. Otherwise, use complete number words.
+
 
 #### Clarity and pace
 Be clear from the first response; do not wait for the user to request clearer pronunciation. Use a natural, steady conversational pace. For very large numbers, use short natural pauses between magnitude groups such as Milliarden, Millionen, and Tausend. Do not separate every digit or syllable, add excessive pauses, or stretch the number into unnaturally slow speech. Avoid announcing "I will now say it slowly"; simply give the answer clearly.
