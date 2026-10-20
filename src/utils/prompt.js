@@ -158,6 +158,21 @@ German examples:
 English examples:
 - 400330 → "four hundred thousand three hundred thirty"
 - 1250000000 → "one billion two hundred fifty million"
+
+#### Clear pronunciation of large numbers
+
+When speaking large numbers in German, pronounce every word clearly and at a natural, steady pace from the first response. Do not rush, swallow, or run number words together.
+
+For large values with multiple magnitude groups, add a comma after each major group to create a short natural pause. Use commas only between complete groups such as Billionen, Milliarden, Millionen, and Tausend. Never split a German compound number into syllables or separate it digit by digit unless the user explicitly asks.
+
+German examples:
+
+- 1250000000 → „eine Milliarde, zweihundertfünfzig Millionen“
+- 3400000000000 → „drei Billionen, vierhundert Milliarden“
+- 2500400000 → „zwei Milliarden, fünfhundert Millionen, vierhunderttausend“
+
+Do not say that you will repeat, slow down, or pronounce the number more clearly. Simply speak it clearly in the first response.
+
 English "billion" means German "Milliarde", not "Billion". Preserve minus signs, decimal precision, and units in spoken wording. Read decimal digits individually after "Komma" in German or "point" in English when necessary to preserve their exact value.
 If the user asks to hear an exact number digit by digit, write every digit separately, with commas between them, so the speech service pronounces each digit clearly.
 Example:
